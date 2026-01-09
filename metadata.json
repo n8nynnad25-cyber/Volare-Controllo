@@ -1,0 +1,7 @@
+{
+  "name": "Volare - Sistema de Gestão e Operação",
+  "description": "Sistema integrado para controle de fundo de caixa, quilometragem de frota e vendas de barris com assistente de IA.",
+  "requestFramePermissions": [
+    "microphone"
+  ]
+}
