@@ -11,9 +11,12 @@ import { exportToCSV } from '../src/utils/csvExport';
 interface CashFundDashboardProps {
   state: AppState;
   onAdd: () => void;
+  onEdit?: (tx: CashTransaction) => void;
+  onDelete?: (id: string) => void;
+  onConfirmRequest?: (message: string) => Promise<boolean>;
 }
 
-const CashFundDashboard: React.FC<CashFundDashboardProps> = ({ state, onAdd }) => {
+const CashFundDashboard: React.FC<CashFundDashboardProps> = ({ state, onAdd, onEdit, onDelete, onConfirmRequest }) => {
   const handleExportReport = () => {
     const headers = ['Data', 'Tipo', 'Responsável', 'Categoria', 'Descrição', 'Valor (MZN)'];
     const rows = state.cashTransactions.map(tx => [
@@ -201,6 +204,7 @@ const CashFundDashboard: React.FC<CashFundDashboardProps> = ({ state, onAdd }) =
                 <th className="px-6 py-4">Categoria</th>
                 <th className="px-6 py-4">Descrição</th>
                 <th className="px-6 py-4 text-right">Valor</th>
+                <th className="px-6 py-4 text-right">Ações</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 text-sm">
@@ -227,6 +231,36 @@ const CashFundDashboard: React.FC<CashFundDashboardProps> = ({ state, onAdd }) =
                         {tx.type === 'entrada' ? 'keyboard_arrow_up' : 'keyboard_arrow_down'}
                       </span>
                       {formatCurrency(tx.amount)}
+                    </div>
+                  </td>
+                  <td className="px-6 py-4 text-right">
+                    <div className="flex items-center justify-end gap-1">
+                      {onEdit && (
+                        <button
+                          onClick={() => onEdit(tx)}
+                          className="p-1 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors"
+                          title="Editar"
+                        >
+                          <span className="material-symbols-outlined text-[18px]">edit</span>
+                        </button>
+                      )}
+                      {onDelete && (
+                        <button
+                          onClick={async () => {
+                            const confirmed = onConfirmRequest
+                              ? await onConfirmRequest('Tem certeza que deseja remover este movimento?')
+                              : confirm('Tem certeza que deseja remover este movimento?');
+
+                            if (confirmed) {
+                              onDelete(tx.id);
+                            }
+                          }}
+                          className="p-1 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
+                          title="Remover"
+                        >
+                          <span className="material-symbols-outlined text-[18px]">delete</span>
+                        </button>
+                      )}
                     </div>
                   </td>
                 </tr>

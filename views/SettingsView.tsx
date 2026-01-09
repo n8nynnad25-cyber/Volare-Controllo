@@ -16,6 +16,8 @@ interface SettingsViewProps {
     onAddKegBrand?: (name: string) => Promise<void>;
     onUpdateKegBrand?: (id: string, name: string) => Promise<void>;
     onDeleteKegBrand?: (id: string) => Promise<void>;
+    onNotify?: (message: string, type: 'success' | 'error' | 'info') => void;
+    onConfirmRequest?: (message: string) => Promise<boolean>;
 }
 
 type Tab = 'general' | 'categories' | 'managers' | 'vehicles' | 'kegs';
@@ -34,7 +36,9 @@ const SettingsView: React.FC<SettingsViewProps> = ({
     onDeleteVehicle,
     onAddKegBrand,
     onUpdateKegBrand,
-    onDeleteKegBrand
+    onDeleteKegBrand,
+    onNotify,
+    onConfirmRequest
 }) => {
     const [activeTab, setActiveTab] = useState<Tab>('general');
 
@@ -82,9 +86,16 @@ const SettingsView: React.FC<SettingsViewProps> = ({
         setEditingName('');
     };
 
-    const handleDelete = (id: string) => {
-        if (window.confirm('Tem certeza que deseja remover esta categoria?') && onDeleteCategory) {
+    const handleDelete = async (id: string) => {
+        if (!onDeleteCategory) return;
+        const confirmed = onConfirmRequest
+            ? await onConfirmRequest('Tem certeza que deseja remover esta categoria?')
+            : confirm('Tem certeza que deseja remover esta categoria?');
+
+        if (confirmed) {
             onDeleteCategory(id);
+        } else {
+            onNotify?.('Ação cancelada.', 'info');
         }
     };
 
@@ -109,9 +120,16 @@ const SettingsView: React.FC<SettingsViewProps> = ({
         setEditingManagerRole('');
     };
 
-    const handleDeleteManager = (id: string) => {
-        if (window.confirm('Tem certeza que deseja remover este gerente?') && onDeleteManager) {
+    const handleDeleteManager = async (id: string) => {
+        if (!onDeleteManager) return;
+        const confirmed = onConfirmRequest
+            ? await onConfirmRequest('Tem certeza que deseja remover este gerente?')
+            : confirm('Tem certeza que deseja remover este gerente?');
+
+        if (confirmed) {
             onDeleteManager(id);
+        } else {
+            onNotify?.('Ação cancelada.', 'info');
         }
     };
 
@@ -139,9 +157,16 @@ const SettingsView: React.FC<SettingsViewProps> = ({
         setEditingVehicleType('');
     };
 
-    const handleDeleteVehicle = (id: string) => {
-        if (window.confirm('Tem certeza que deseja remover este veículo?') && onDeleteVehicle) {
+    const handleDeleteVehicle = async (id: string) => {
+        if (!onDeleteVehicle) return;
+        const confirmed = onConfirmRequest
+            ? await onConfirmRequest('Tem certeza que deseja remover este veículo?')
+            : confirm('Tem certeza que deseja remover este veículo?');
+
+        if (confirmed) {
             onDeleteVehicle(id);
+        } else {
+            onNotify?.('Ação cancelada.', 'info');
         }
     };
 
@@ -163,9 +188,16 @@ const SettingsView: React.FC<SettingsViewProps> = ({
         setEditingBrandName('');
     };
 
-    const handleDeleteBrand = (id: string) => {
-        if (window.confirm('Tem certeza que deseja remover esta marca de barril?') && onDeleteKegBrand) {
+    const handleDeleteBrand = async (id: string) => {
+        if (!onDeleteKegBrand) return;
+        const confirmed = onConfirmRequest
+            ? await onConfirmRequest('Tem certeza que deseja remover esta marca de barril?')
+            : confirm('Tem certeza que deseja remover esta marca de barril?');
+
+        if (confirmed) {
             onDeleteKegBrand(id);
+        } else {
+            onNotify?.('Ação cancelada.', 'info');
         }
     };
 

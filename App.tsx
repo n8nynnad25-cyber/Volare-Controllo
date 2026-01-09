@@ -14,10 +14,15 @@ import KegSalesForm from './views/KegSalesForm';
 import SettingsView from './views/SettingsView';
 import LoginView from './views/LoginView';
 import Chatbot from './components/Chatbot';
+import Toast from './components/Toast';
+import ConfirmationModal from './components/ConfirmationModal';
 import { supabase } from './src/lib/supabase';
 
 const App: React.FC = () => {
   const [view, setView] = useState<ViewType>('dashboard');
+  const [editingTransaction, setEditingTransaction] = useState<CashTransaction | null>(null);
+  const [editingMileageRecord, setEditingMileageRecord] = useState<MileageRecord | null>(null);
+  const [editingKegSale, setEditingKegSale] = useState<KegSale | null>(null);
   const [user, setUser] = useState<User | null>(null);
 
   const [state, setState] = useState<AppState>(() => {
@@ -77,6 +82,41 @@ const App: React.FC = () => {
   const handleLogout = async () => {
     await supabase.auth.signOut();
     // User state será limpo pelo listener
+  };
+
+  const showToast = (message: string, type: 'success' | 'error' | 'info' = 'success') => {
+    const id = Math.random().toString(36).substring(2, 9);
+    setState(prev => ({
+      ...prev,
+      toasts: [...prev.toasts, { id, message, type }]
+    }));
+  };
+
+  const removeToast = (id: string) => {
+    setState(prev => ({
+      ...prev,
+      toasts: prev.toasts.filter(t => t.id !== id)
+    }));
+  };
+
+  const showConfirm = (message: string): Promise<boolean> => {
+    return new Promise((resolve) => {
+      setState(prev => ({
+        ...prev,
+        confirmationModal: {
+          isOpen: true,
+          message,
+          onConfirm: () => {
+            setState(s => ({ ...s, confirmationModal: { ...s.confirmationModal, isOpen: false } }));
+            resolve(true);
+          },
+          onCancel: () => {
+            setState(s => ({ ...s, confirmationModal: { ...s.confirmationModal, isOpen: false } }));
+            resolve(false);
+          }
+        }
+      }));
+    });
   };
 
   // Fetch Initial Data
@@ -226,9 +266,11 @@ const App: React.FC = () => {
 
     if (error) {
       console.error("Erro ao salvar transação:", error);
-      alert("Erro ao salvar dados no servidor!");
+      showToast("O registo não foi gravado.", "error");
       return;
     }
+
+    showToast("Registado com sucesso.", "success");
 
     if (data) {
       const savedTransactions: CashTransaction[] = data.map(item => ({
@@ -245,6 +287,61 @@ const App: React.FC = () => {
       setState(prev => ({ ...prev, cashTransactions: [...savedTransactions, ...prev.cashTransactions] }));
       setView('cash-fund');
     }
+  };
+
+  const updateCashTransaction = async (id: string, updatedTx: Partial<CashTransaction>) => {
+    // Preparar dados para update (mapping camelCase -> snake_case)
+    const dbUpdate: any = {};
+    if (updatedTx.date) dbUpdate.date = updatedTx.date;
+    if (updatedTx.type) dbUpdate.type = updatedTx.type;
+    if (updatedTx.category) dbUpdate.category = updatedTx.category;
+    if (updatedTx.description) dbUpdate.description = updatedTx.description;
+    if (updatedTx.amount) dbUpdate.amount = updatedTx.amount;
+    if (updatedTx.manager) dbUpdate.manager = updatedTx.manager;
+    if (updatedTx.isVendaDinheiro !== undefined) dbUpdate.is_venda_dinheiro = updatedTx.isVendaDinheiro;
+
+    const { error } = await supabase
+      .from('cash_transactions')
+      .update(dbUpdate)
+      .eq('id', id);
+
+    if (error) {
+      console.error("Erro ao atualizar transação:", error);
+      showToast("O registo não foi gravado.", "error");
+      return;
+    }
+
+    showToast("Registado com sucesso.", "success");
+
+    setState(prev => ({
+      ...prev,
+      cashTransactions: prev.cashTransactions.map(tx =>
+        tx.id === id ? { ...tx, ...updatedTx, id } : tx
+      )
+    }));
+
+    setEditingTransaction(null);
+    setView('cash-fund');
+  };
+
+  const deleteCashTransaction = async (id: string) => {
+    const { error } = await supabase
+      .from('cash_transactions')
+      .delete()
+      .eq('id', id);
+
+    if (error) {
+      console.error("Erro ao remover transação:", error);
+      showToast("Erro ao remover transação!", "error");
+      return;
+    }
+
+    showToast("Transação removida.", "success");
+
+    setState(prev => ({
+      ...prev,
+      cashTransactions: prev.cashTransactions.filter(tx => tx.id !== id)
+    }));
   };
 
   const addMileageRecord = async (record: MileageRecord | MileageRecord[]) => {
@@ -267,9 +364,11 @@ const App: React.FC = () => {
 
     if (error) {
       console.error("Erro ao salvar quilometragem:", error);
-      alert("Erro ao salvar dados no servidor!");
+      showToast("O registo não foi gravado.", "error");
       return;
     }
+
+    showToast("Registado com sucesso.", "success");
 
     if (data) {
       const savedRecords: MileageRecord[] = data.map(item => ({
@@ -285,6 +384,58 @@ const App: React.FC = () => {
       setState(prev => ({ ...prev, mileageRecords: [...savedRecords, ...prev.mileageRecords] }));
       setView('mileage');
     }
+  };
+
+  const updateMileageRecord = async (id: string, updatedRecord: Partial<MileageRecord>) => {
+    // Database Mapping (camelCase -> snake_case)
+    const dbUpdate: any = {};
+    if (updatedRecord.date) dbUpdate.date = updatedRecord.date;
+    if (updatedRecord.vehicle) dbUpdate.vehicle = updatedRecord.vehicle;
+    if (updatedRecord.kmInitial !== undefined) dbUpdate.km_initial = updatedRecord.kmInitial;
+    if (updatedRecord.kmFinal !== undefined) dbUpdate.km_final = updatedRecord.kmFinal;
+    if (updatedRecord.liters !== undefined) dbUpdate.liters = updatedRecord.liters;
+    if (updatedRecord.cost !== undefined) dbUpdate.cost = updatedRecord.cost;
+
+    const { error } = await supabase
+      .from('mileage_records')
+      .update(dbUpdate)
+      .eq('id', id);
+
+    if (error) {
+      console.error("Erro ao atualizar quilometragem:", error);
+      showToast("O registo não foi gravado.", "error");
+      return;
+    }
+
+    showToast("Registado com sucesso.", "success");
+
+    setState(prev => ({
+      ...prev,
+      mileageRecords: prev.mileageRecords.map(rec =>
+        rec.id === id ? { ...rec, ...updatedRecord, id } : rec
+      )
+    }));
+
+    setEditingMileageRecord(null);
+    setView('mileage');
+  };
+
+  const deleteMileageRecord = async (id: string) => {
+    const { error } = await supabase
+      .from('mileage_records')
+      .delete()
+      .eq('id', id);
+
+    if (error) {
+      console.error("Erro ao remover quilometragem:", error);
+      showToast("Erro ao remover registo!", "error");
+      return;
+    }
+
+    setState(prev => ({
+      ...prev,
+      mileageRecords: prev.mileageRecords.filter(rec => rec.id !== id)
+    }));
   };
 
   const addKegSale = async (sale: KegSale | KegSale[]) => {
@@ -308,9 +459,11 @@ const App: React.FC = () => {
 
     if (error) {
       console.error("Erro ao salvar vendas:", error);
-      alert("Erro ao salvar dados no servidor!");
+      showToast("O registo não foi gravado.", "error");
       return;
     }
+
+    showToast("Registado com sucesso.", "success");
 
     if (data) {
       const savedSales: KegSale[] = data.map(item => ({
@@ -329,6 +482,62 @@ const App: React.FC = () => {
     }
   };
 
+  const updateKegSale = async (id: string, updatedSale: Partial<KegSale>) => {
+    // Database Mapping
+    const dbUpdate: any = {};
+    if (updatedSale.date) dbUpdate.date = updatedSale.date;
+    if (updatedSale.brand) dbUpdate.brand = updatedSale.brand;
+    if (updatedSale.volume !== undefined) dbUpdate.volume = updatedSale.volume;
+    if (updatedSale.quantity !== undefined) dbUpdate.quantity = updatedSale.quantity;
+    if (updatedSale.code) dbUpdate.code = updatedSale.code;
+    if (updatedSale.value !== undefined) dbUpdate.value = updatedSale.value;
+    if (updatedSale.status) dbUpdate.status = updatedSale.status;
+
+    const { error } = await supabase
+      .from('keg_sales')
+      .update(dbUpdate)
+      .eq('id', id);
+
+    if (error) {
+      console.error("Erro ao atualizar venda de barril:", error);
+      showToast("O registo não foi gravado.", "error");
+      return;
+    }
+
+    showToast("Registado com sucesso.", "success");
+
+    setState(prev => ({
+      ...prev,
+      kegSales: prev.kegSales.map(sale =>
+        sale.id === id ? { ...sale, ...updatedSale, id } : sale
+      )
+    }));
+
+    setEditingKegSale(null);
+    setView('keg-sales');
+  };
+
+  const deleteKegSale = async (id: string) => {
+    const { error } = await supabase
+      .from('keg_sales')
+      .delete()
+      .eq('id', id);
+
+    if (error) {
+      console.error("Erro ao remover venda de barril:", error);
+      showToast("Erro ao remover venda!", "error");
+      return;
+    }
+
+    showToast("Venda removida com sucesso.", "success");
+
+    setState(prev => ({
+      ...prev,
+      kegSales: prev.kegSales.filter(sale => sale.id !== id)
+    }));
+  };
+
+
   const addCategory = async (name: string) => {
     const { data, error } = await supabase
       .from('transaction_categories')
@@ -337,9 +546,11 @@ const App: React.FC = () => {
 
     if (error) {
       console.error('Error adding category:', error);
-      alert('Erro ao adicionar categoria!');
+      showToast('Erro ao adicionar categoria!', 'error');
       return;
     }
+
+    showToast('Categoria adicionada!', 'success');
 
     if (data && data.length > 0) {
       setState(prev => ({ ...prev, categories: [...prev.categories, data[0]] }));
@@ -355,9 +566,11 @@ const App: React.FC = () => {
 
     if (error) {
       console.error('Error updating category:', error);
-      alert('Erro ao atualizar categoria!');
+      showToast('Erro ao atualizar categoria!', 'error');
       return;
     }
+
+    showToast('Categoria atualizada!', 'success');
 
     if (data && data.length > 0) {
       setState(prev => ({
@@ -375,9 +588,11 @@ const App: React.FC = () => {
 
     if (error) {
       console.error('Error deleting category:', error);
-      alert('Erro ao remover categoria!');
+      showToast('Erro ao remover categoria!', 'error');
       return;
     }
+
+    showToast('Categoria removida!', 'success');
 
     setState(prev => ({
       ...prev,
@@ -393,9 +608,11 @@ const App: React.FC = () => {
 
     if (error) {
       console.error('Error adding manager:', error);
-      alert('Erro ao adicionar gerente!');
+      showToast('Erro ao adicionar gerente!', 'error');
       return;
     }
+
+    showToast('Gerente adicionado!', 'success');
 
     if (data && data.length > 0) {
       setState(prev => ({ ...prev, managers: [...prev.managers, data[0]] }));
@@ -411,9 +628,11 @@ const App: React.FC = () => {
 
     if (error) {
       console.error('Error updating manager:', error);
-      alert('Erro ao atualizar gerente!');
+      showToast('Erro ao atualizar gerente!', 'error');
       return;
     }
+
+    showToast('Gerente atualizado!', 'success');
 
     if (data && data.length > 0) {
       setState(prev => ({
@@ -431,9 +650,11 @@ const App: React.FC = () => {
 
     if (error) {
       console.error('Error deleting manager:', error);
-      alert('Erro ao remover gerente!');
+      showToast('Erro ao remover gerente!', 'error');
       return;
     }
+
+    showToast('Gerente removido!', 'success');
 
     setState(prev => ({
       ...prev,
@@ -449,9 +670,11 @@ const App: React.FC = () => {
 
     if (error) {
       console.error('Error adding vehicle:', error);
-      alert('Erro ao adicionar veículo!');
+      showToast('Erro ao adicionar veículo!', 'error');
       return;
     }
+
+    showToast('Veículo adicionado!', 'success');
 
     if (data && data.length > 0) {
       setState(prev => ({ ...prev, vehicles: [...prev.vehicles, data[0]] }));
@@ -467,9 +690,11 @@ const App: React.FC = () => {
 
     if (error) {
       console.error('Error updating vehicle:', error);
-      alert('Erro ao atualizar veículo!');
+      showToast('Erro ao atualizar veículo!', 'error');
       return;
     }
+
+    showToast('Veículo atualizado!', 'success');
 
     if (data && data.length > 0) {
       setState(prev => ({
@@ -487,9 +712,11 @@ const App: React.FC = () => {
 
     if (error) {
       console.error('Error deleting vehicle:', error);
-      alert('Erro ao remover veículo!');
+      showToast('Erro ao remover veículo!', 'error');
       return;
     }
+
+    showToast('Veículo removido!', 'success');
 
     setState(prev => ({
       ...prev,
@@ -505,9 +732,11 @@ const App: React.FC = () => {
 
     if (error) {
       console.error('Error adding keg brand:', error);
-      alert('Erro ao adicionar marca de barril!');
+      showToast('Erro ao adicionar marca!', 'error');
       return;
     }
+
+    showToast('Marca adicionada!', 'success');
 
     if (data && data.length > 0) {
       setState(prev => ({ ...prev, kegBrands: [...prev.kegBrands, data[0]] }));
@@ -523,9 +752,11 @@ const App: React.FC = () => {
 
     if (error) {
       console.error('Error updating keg brand:', error);
-      alert('Erro ao atualizar marca de barril!');
+      showToast('Erro ao atualizar marca!', 'error');
       return;
     }
+
+    showToast('Marca atualizada!', 'success');
 
     if (data && data.length > 0) {
       setState(prev => ({
@@ -543,9 +774,11 @@ const App: React.FC = () => {
 
     if (error) {
       console.error('Error deleting keg brand:', error);
-      alert('Erro ao remover marca de barril!');
+      showToast('Erro ao remover marca!', 'error');
       return;
     }
+
+    showToast('Marca removida!', 'success');
 
     setState(prev => ({
       ...prev,
@@ -562,17 +795,113 @@ const App: React.FC = () => {
       case 'dashboard':
         return <GeneralDashboard state={state} onNavigate={setView} />;
       case 'cash-fund':
-        return <CashFundDashboard state={state} onAdd={() => setView('cash-fund-new')} />;
+        return (
+          <CashFundDashboard
+            state={state}
+            onAdd={() => {
+              setEditingTransaction(null);
+              setView('cash-fund-new');
+            }}
+            onEdit={(tx) => {
+              setEditingTransaction(tx);
+              setView('cash-fund-edit');
+            }}
+            onDelete={deleteCashTransaction}
+            onConfirmRequest={showConfirm}
+          />
+        );
       case 'cash-fund-new':
-        return <CashFundForm state={state} onSubmit={addCashTransaction} onCancel={() => setView('cash-fund')} />;
+        return <CashFundForm state={state} onSubmit={addCashTransaction} onCancel={() => setView('cash-fund')} onNotify={showToast} onConfirmRequest={showConfirm} />;
+      case 'cash-fund-edit':
+        return (
+          <CashFundForm
+            state={state}
+            initialData={editingTransaction || undefined}
+            onSubmit={(tx) => {
+              if (!Array.isArray(tx) && editingTransaction) {
+                updateCashTransaction(editingTransaction.id, tx);
+              }
+            }}
+            onCancel={() => {
+              setEditingTransaction(null);
+              setView('cash-fund');
+            }}
+            onNotify={showToast}
+            onConfirmRequest={showConfirm}
+          />
+        );
       case 'mileage':
-        return <MileageDashboard state={state} onAdd={() => setView('mileage-new')} />;
+        return (
+          <MileageDashboard
+            state={state}
+            onAdd={() => {
+              setEditingMileageRecord(null);
+              setView('mileage-new');
+            }}
+            onEdit={(record) => {
+              setEditingMileageRecord(record);
+              setView('mileage-edit');
+            }}
+            onDelete={deleteMileageRecord}
+            onConfirmRequest={showConfirm}
+          />
+        );
       case 'mileage-new':
-        return <MileageForm state={state} onSubmit={addMileageRecord} onCancel={() => setView('mileage')} />;
+        return <MileageForm state={state} onSubmit={addMileageRecord} onCancel={() => setView('mileage')} onNotify={showToast} onConfirmRequest={showConfirm} />;
+      case 'mileage-edit':
+        return (
+          <MileageForm
+            state={state}
+            initialData={editingMileageRecord || undefined}
+            onSubmit={(record) => {
+              if (!Array.isArray(record) && editingMileageRecord) {
+                updateMileageRecord(editingMileageRecord.id, record);
+              }
+            }}
+            onCancel={() => {
+              setEditingMileageRecord(null);
+              setView('mileage');
+            }}
+            onNotify={showToast}
+            onConfirmRequest={showConfirm}
+          />
+        );
       case 'keg-sales':
-        return <KegSalesDashboard state={state} onAdd={() => setView('keg-sales-new')} />;
+        return (
+          <KegSalesDashboard
+            state={state}
+            onAdd={() => {
+              setEditingKegSale(null);
+              setView('keg-sales-new');
+            }}
+            onEdit={(sale) => {
+              setEditingKegSale(sale);
+              setView('keg-sales-edit');
+            }}
+            onDelete={deleteKegSale}
+            onConfirmRequest={showConfirm}
+          />
+        );
       case 'keg-sales-new':
-        return <KegSalesForm state={state} onSubmit={addKegSale} onCancel={() => setView('keg-sales')} />;
+        return <KegSalesForm state={state} onSubmit={addKegSale} onCancel={() => setView('keg-sales')} onNotify={showToast} onConfirmRequest={showConfirm} />;
+      case 'keg-sales-edit':
+        return (
+          <KegSalesForm
+            state={state}
+            initialData={editingKegSale || undefined}
+            onSubmit={(sale) => {
+              if (!Array.isArray(sale) && editingKegSale) {
+                updateKegSale(editingKegSale.id, sale);
+              }
+            }}
+            onCancel={() => {
+              setEditingKegSale(null);
+              setView('keg-sales');
+            }}
+            onNotify={showToast}
+            onConfirmRequest={showConfirm}
+          />
+        );
       case 'settings':
         return (
           <SettingsView
@@ -590,6 +919,8 @@ const App: React.FC = () => {
             onAddKegBrand={addKegBrand}
             onUpdateKegBrand={updateKegBrand}
             onDeleteKegBrand={deleteKegBrand}
+            onNotify={showToast}
+            onConfirmRequest={showConfirm}
           />
         );
       default:
@@ -609,6 +940,8 @@ const App: React.FC = () => {
         </main>
         <Chatbot appState={state} />
       </div>
+      <Toast toasts={state.toasts} onRemove={removeToast} />
+      <ConfirmationModal state={state.confirmationModal} />
     </div>
   );
 };

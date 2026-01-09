@@ -7,29 +7,41 @@ interface CashFundFormProps {
   state: AppState;
   onSubmit: (tx: CashTransaction | CashTransaction[]) => void;
   onCancel: () => void;
+  onNotify?: (message: string, type: 'success' | 'error' | 'info') => void;
+  onConfirmRequest?: (message: string) => Promise<boolean>;
+  initialData?: CashTransaction;
 }
 
-const CashFundForm: React.FC<CashFundFormProps> = ({ state, onSubmit, onCancel }) => {
+const CashFundForm: React.FC<CashFundFormProps> = ({ state, onSubmit, onCancel, onNotify, onConfirmRequest, initialData }) => {
   const [activeTab, setActiveTab] = useState<'manual' | 'import'>('manual');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [formData, setFormData] = useState({
-    type: 'saida' as 'entrada' | 'saida',
-    date: new Date().toISOString().split('T')[0],
-    amount: '',
-    category: '',
-    description: '',
-    manager: '',
-    isVendaDinheiro: false
+    type: initialData?.type || 'saida' as 'entrada' | 'saida',
+    date: initialData?.date || new Date().toISOString().split('T')[0],
+    amount: initialData?.amount.toString() || '',
+    category: initialData?.category || '',
+    description: initialData?.description || '',
+    manager: initialData?.manager || '',
+    isVendaDinheiro: initialData?.isVendaDinheiro || false
   });
 
   const [previewData, setPreviewData] = useState<CashTransaction[]>([]);
   const [importError, setImportError] = useState<string | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
 
-  const handleSubmitManual = (e: React.FormEvent) => {
+  const handleSubmitManual = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.amount || !formData.category || !formData.manager) return;
+
+    const confirmed = onConfirmRequest
+      ? await onConfirmRequest('Deseja confirmar o registo deste movimento?')
+      : confirm('Deseja confirmar o registo deste movimento?');
+
+    if (!confirmed) {
+      onNotify?.('O registo não foi gravado.', 'error');
+      return;
+    }
 
     onSubmit({
       id: Math.random().toString(36).substr(2, 9),
@@ -103,9 +115,17 @@ const CashFundForm: React.FC<CashFundFormProps> = ({ state, onSubmit, onCancel }
     reader.readAsText(file);
   };
 
-  const handleConfirmImport = () => {
+  const handleConfirmImport = async () => {
     if (previewData.length > 0) {
-      onSubmit(previewData);
+      const confirmed = onConfirmRequest
+        ? await onConfirmRequest(`Deseja confirmar o registo de ${previewData.length} movimentos?`)
+        : confirm(`Deseja confirmar o registo de ${previewData.length} movimentos?`);
+
+      if (confirmed) {
+        onSubmit(previewData);
+      } else {
+        onNotify?.('O registo não foi gravado.', 'error');
+      }
     }
   };
 
@@ -119,23 +139,25 @@ const CashFundForm: React.FC<CashFundFormProps> = ({ state, onSubmit, onCancel }
         {/* Header with Tabs */}
         <div className="p-6 border-b border-slate-100 bg-slate-50/50 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
           <div>
-            <h3 className="text-lg font-bold text-slate-900">Novo Movimento</h3>
-            <p className="text-sm text-slate-500">Registe manualmente ou importe dados via planilha.</p>
+            <h3 className="text-lg font-bold text-slate-900">{initialData ? 'Editar Movimento' : 'Novo Movimento'}</h3>
+            <p className="text-sm text-slate-500">{initialData ? 'Altere os dados do movimento abaixo.' : 'Registe manualmente ou importe dados via planilha.'}</p>
           </div>
-          <div className="flex bg-slate-200 p-1 rounded-lg">
-            <button
-              onClick={() => setActiveTab('manual')}
-              className={`px-4 py-1.5 text-xs font-bold rounded-md transition-all ${activeTab === 'manual' ? 'bg-white text-primary shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
-            >
-              Entrada Manual
-            </button>
-            <button
-              onClick={() => setActiveTab('import')}
-              className={`px-4 py-1.5 text-xs font-bold rounded-md transition-all ${activeTab === 'import' ? 'bg-white text-primary shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
-            >
-              Importar CSV / Excel
-            </button>
-          </div>
+          {!initialData && (
+            <div className="flex bg-slate-200 p-1 rounded-lg">
+              <button
+                onClick={() => setActiveTab('manual')}
+                className={`px-4 py-1.5 text-xs font-bold rounded-md transition-all ${activeTab === 'manual' ? 'bg-white text-primary shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+              >
+                Entrada Manual
+              </button>
+              <button
+                onClick={() => setActiveTab('import')}
+                className={`px-4 py-1.5 text-xs font-bold rounded-md transition-all ${activeTab === 'import' ? 'bg-white text-primary shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+              >
+                Importar CSV / Excel
+              </button>
+            </div>
+          )}
         </div>
 
         {activeTab === 'manual' ? (

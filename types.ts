@@ -1,5 +1,5 @@
 
-export type ViewType = 'dashboard' | 'cash-fund' | 'cash-fund-new' | 'mileage' | 'mileage-new' | 'keg-sales' | 'keg-sales-new' | 'settings';
+export type ViewType = 'dashboard' | 'cash-fund' | 'cash-fund-new' | 'cash-fund-edit' | 'mileage' | 'mileage-new' | 'mileage-edit' | 'keg-sales' | 'keg-sales-new' | 'keg-sales-edit' | 'settings';
 
 export interface User {
   id: string;
@@ -64,6 +64,19 @@ export interface KegBrand {
   name: string;
 }
 
+export interface ToastMessage {
+  id: string;
+  message: string;
+  type: 'success' | 'error' | 'info';
+}
+
+export interface ConfirmationModalState {
+  isOpen: boolean;
+  message: string;
+  onConfirm: () => void;
+  onCancel: () => void;
+}
+
 export interface AppState {
   cashTransactions: CashTransaction[];
   mileageRecords: MileageRecord[];
@@ -72,4 +85,6 @@ export interface AppState {
   managers: Manager[];
   vehicles: Vehicle[];
   kegBrands: KegBrand[];
+  toasts: ToastMessage[];
+  confirmationModal: ConfirmationModalState;
 }

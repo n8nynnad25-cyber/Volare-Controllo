@@ -19,12 +19,24 @@ export const INITIAL_STATE: AppState = {
   categories: [],
   managers: [],
   vehicles: [],
-  kegBrands: []
+  kegBrands: [],
+  toasts: [],
+  confirmationModal: {
+    isOpen: false,
+    message: '',
+    onConfirm: () => { },
+    onCancel: () => { }
+  }
 };
 
 export const BRAND_COLORS: Record<string, string> = {
-  'Heineken': '#16a34a',
+  'Heineken': '#16a34a', // Verde
+  '2M': '#dc2626',      // Vermelho
+  'Txilar': '#f97316',   // Laranja
+  'Stella Artois': '#eab308', // Amarelo
   'Budweiser': '#dc2626',
-  'Stella Artois': '#eab308',
+  'Laurentina Preta': '#1e293b',
+  'Laurentina Clara': '#f59e0b',
+  'Manica': '#10b981',
   'Outras': '#94a3b8',
 };

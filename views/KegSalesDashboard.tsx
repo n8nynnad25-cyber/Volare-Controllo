@@ -8,13 +8,17 @@ import {
 } from 'recharts';
 import { formatCurrency } from '../src/utils/format';
 import { exportToCSV } from '../src/utils/csvExport';
+import { getBrandColor } from '../src/utils/colors';
 
 interface KegSalesDashboardProps {
   state: AppState;
   onAdd: () => void;
+  onEdit?: (sale: KegSale) => void;
+  onDelete?: (id: string) => void;
+  onConfirmRequest?: (message: string) => Promise<boolean>;
 }
 
-const KegSalesDashboard: React.FC<KegSalesDashboardProps> = ({ state, onAdd }) => {
+const KegSalesDashboard: React.FC<KegSalesDashboardProps> = ({ state, onAdd, onEdit, onDelete, onConfirmRequest }) => {
   const handleExportReport = () => {
     const headers = ['Data', 'Código', 'Marca', 'Volume (L)', 'Quantidade', 'Valor (MZN)', 'Status'];
     const rows = state.kegSales.map(sale => [
@@ -222,6 +226,7 @@ const KegSalesDashboard: React.FC<KegSalesDashboardProps> = ({ state, onAdd }) =
                 <th className="px-8 py-5">Volume/Qtd</th>
                 <th className="px-8 py-5 text-right">Valor</th>
                 <th className="px-8 py-5 text-center">Status</th>
+                <th className="px-8 py-5 text-right">Ações</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-50 font-bold">
@@ -231,7 +236,7 @@ const KegSalesDashboard: React.FC<KegSalesDashboardProps> = ({ state, onAdd }) =
                   <td className="px-8 py-4 text-xs text-slate-800 font-mono">{sale.code}</td>
                   <td className="px-8 py-4">
                     <div className="flex items-center gap-2">
-                      <span className="size-2 rounded-full" style={{ backgroundColor: BRAND_COLORS[sale.brand] || '#ccc' }}></span>
+                      <span className="size-2 rounded-full" style={{ backgroundColor: getBrandColor(sale.brand) }}></span>
                       <span className="text-xs font-black text-slate-700 uppercase tracking-tight">{sale.brand}</span>
                     </div>
                   </td>
@@ -241,6 +246,36 @@ const KegSalesDashboard: React.FC<KegSalesDashboardProps> = ({ state, onAdd }) =
                     <span className={`px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-tighter ${sale.status === 'Confirmado' ? 'bg-emerald-50 text-emerald-600' : 'bg-amber-50 text-amber-600'}`}>
                       {sale.status}
                     </span>
+                  </td>
+                  <td className="px-8 py-4 text-right">
+                    <div className="flex items-center justify-end gap-1">
+                      {onEdit && (
+                        <button
+                          onClick={() => onEdit(sale)}
+                          className="p-1 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors"
+                          title="Editar"
+                        >
+                          <span className="material-symbols-outlined text-[18px]">edit</span>
+                        </button>
+                      )}
+                      {onDelete && (
+                        <button
+                          onClick={async () => {
+                            const confirmed = onConfirmRequest
+                              ? await onConfirmRequest('Tem certeza que deseja cancelar esta venda de barril?')
+                              : confirm('Tem certeza que deseja cancelar esta venda de barril?');
+
+                            if (confirmed) {
+                              onDelete(sale.id);
+                            }
+                          }}
+                          className="p-1 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
+                          title="Cancelar"
+                        >
+                          <span className="material-symbols-outlined text-[18px]">delete</span>
+                        </button>
+                      )}
+                    </div>
                   </td>
                 </tr>
               ))}

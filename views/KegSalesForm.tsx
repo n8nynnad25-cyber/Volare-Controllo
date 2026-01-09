@@ -7,20 +7,23 @@ interface KegSalesFormProps {
   state?: AppState;
   onSubmit: (sale: KegSale | KegSale[]) => void;
   onCancel: () => void;
+  onNotify?: (message: string, type: 'success' | 'error' | 'info') => void;
+  onConfirmRequest?: (message: string) => Promise<boolean>;
+  initialData?: KegSale;
 }
 
-const KegSalesForm: React.FC<KegSalesFormProps> = ({ state, onSubmit, onCancel }) => {
+const KegSalesForm: React.FC<KegSalesFormProps> = ({ state, onSubmit, onCancel, onNotify, onConfirmRequest, initialData }) => {
   const [activeTab, setActiveTab] = useState<'manual' | 'import'>('manual');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Manual Form State
   const [formData, setFormData] = useState({
-    date: new Date().toISOString().split('T')[0],
-    brand: '',
-    volume: '50',
-    quantity: '1',
-    code: '',
-    value: ''
+    date: initialData?.date || new Date().toISOString().split('T')[0],
+    brand: initialData?.brand || '',
+    volume: initialData?.volume.toString() || '50',
+    quantity: initialData?.quantity.toString() || '1',
+    code: initialData?.code || '',
+    value: initialData?.value.toString() || ''
   });
 
   // Import State
@@ -28,19 +31,28 @@ const KegSalesForm: React.FC<KegSalesFormProps> = ({ state, onSubmit, onCancel }
   const [importError, setImportError] = useState<string | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
 
-  const handleSubmitManual = (e: React.FormEvent) => {
+  const handleSubmitManual = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.brand || !formData.value) return;
 
+    const confirmed = onConfirmRequest
+      ? await onConfirmRequest('Deseja confirmar o registo desta venda?')
+      : confirm('Deseja confirmar o registo desta venda?');
+
+    if (!confirmed) {
+      onNotify?.('O registo não foi gravado.', 'error');
+      return;
+    }
+
     onSubmit({
-      id: Math.random().toString(36).substr(2, 9),
+      id: initialData?.id || Math.random().toString(36).substr(2, 9),
       date: formData.date,
       brand: formData.brand,
       volume: parseFloat(formData.volume) || 50,
       quantity: parseInt(formData.quantity) || 1,
       code: formData.code || 'SN-' + Date.now(),
       value: parseFloat(formData.value),
-      status: 'Confirmado'
+      status: initialData?.status || 'Confirmado'
     });
   };
 
@@ -101,23 +113,25 @@ const KegSalesForm: React.FC<KegSalesFormProps> = ({ state, onSubmit, onCancel }
         {/* Navigation Tabs */}
         <div className="p-8 border-b border-slate-100 bg-slate-50/50 flex flex-col md:flex-row justify-between items-center gap-6">
           <div className="flex flex-col text-center md:text-left">
-            <h3 className="text-xl font-black text-slate-900 tracking-tight uppercase">Registo Venda de Barris</h3>
-            <p className="text-sm text-slate-500 font-medium italic">Selecione como deseja inserir as vendas.</p>
+            <h3 className="text-xl font-black text-slate-900 tracking-tight uppercase">{initialData ? 'Editar Venda de Barril' : 'Registo Venda de Barris'}</h3>
+            <p className="text-sm text-slate-500 font-medium italic">{initialData ? 'Altere os dados da venda abaixo.' : 'Selecione como deseja inserir as vendas.'}</p>
           </div>
-          <div className="flex bg-slate-200 p-1 rounded-xl shadow-inner shrink-0">
-            <button
-              onClick={() => setActiveTab('manual')}
-              className={`px-6 py-2.5 text-xs font-black uppercase rounded-lg transition-all ${activeTab === 'manual' ? 'bg-white text-primary shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
-            >
-              Manual
-            </button>
-            <button
-              onClick={() => setActiveTab('import')}
-              className={`px-6 py-2.5 text-xs font-black uppercase rounded-lg transition-all ${activeTab === 'import' ? 'bg-white text-primary shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
-            >
-              Importar CSV
-            </button>
-          </div>
+          {!initialData && (
+            <div className="flex bg-slate-200 p-1 rounded-xl shadow-inner shrink-0">
+              <button
+                onClick={() => setActiveTab('manual')}
+                className={`px-6 py-2.5 text-xs font-black uppercase rounded-lg transition-all ${activeTab === 'manual' ? 'bg-white text-primary shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+              >
+                Manual
+              </button>
+              <button
+                onClick={() => setActiveTab('import')}
+                className={`px-6 py-2.5 text-xs font-black uppercase rounded-lg transition-all ${activeTab === 'import' ? 'bg-white text-primary shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+              >
+                Importar CSV
+              </button>
+            </div>
+          )}
         </div>
 
         {activeTab === 'manual' ? (
@@ -318,7 +332,13 @@ const KegSalesForm: React.FC<KegSalesFormProps> = ({ state, onSubmit, onCancel }
                     Descartar
                   </button>
                   <button
-                    onClick={() => onSubmit(previewData)}
+                    onClick={() => {
+                      if (confirm(`Deseja confirmar o registo de ${previewData.length} vendas?`)) {
+                        onSubmit(previewData);
+                      } else {
+                        onNotify?.('O registo não foi gravado.', 'error');
+                      }
+                    }}
                     className="px-12 py-4 bg-emerald-600 text-white rounded-xl font-black uppercase tracking-widest text-xs shadow-xl shadow-emerald-200 hover:bg-emerald-700 transition-all flex items-center gap-2"
                   >
                     <span className="material-symbols-outlined text-[20px]">task_alt</span>

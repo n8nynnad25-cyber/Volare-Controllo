@@ -7,6 +7,7 @@ import {
   Cell, LineChart, Line, AreaChart, Area, PieChart, Pie, CartesianGrid, Legend
 } from 'recharts';
 import { formatCurrency } from '../src/utils/format';
+import { getBrandColor } from '../src/utils/colors';
 
 interface GeneralDashboardProps {
   state: AppState;
@@ -180,7 +181,7 @@ const GeneralDashboard: React.FC<GeneralDashboardProps> = ({ state, onNavigate }
                 dataKey="value"
               >
                 {kegBrandsData.map((entry, index) => (
-                  <Cell key={`cell-${index}`} fill={BRAND_COLORS[entry.name] || '#94a3b8'} />
+                  <Cell key={`cell-${index}`} fill={getBrandColor(entry.name)} />
                 ))}
               </Pie>
               <Tooltip contentStyle={{ borderRadius: '16px', border: 'none', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)' }} />

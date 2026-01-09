@@ -11,9 +11,12 @@ import { exportToCSV } from '../src/utils/csvExport';
 interface MileageDashboardProps {
   state: AppState;
   onAdd: () => void;
+  onEdit?: (record: MileageRecord) => void;
+  onDelete?: (id: string) => void;
+  onConfirmRequest?: (message: string) => Promise<boolean>;
 }
 
-const MileageDashboard: React.FC<MileageDashboardProps> = ({ state, onAdd }) => {
+const MileageDashboard: React.FC<MileageDashboardProps> = ({ state, onAdd, onEdit, onDelete, onConfirmRequest }) => {
   const handleExportReport = () => {
     const headers = ['Data', 'Veículo', 'Driver', 'Km Inicial', 'Km Final', 'Distância', 'Litros', 'Custo (MZN)'];
     const rows = state.mileageRecords.map(rec => [
@@ -267,6 +270,7 @@ const MileageDashboard: React.FC<MileageDashboardProps> = ({ state, onAdd }) => 
                 <th className="px-8 py-5">Percorrido</th>
                 <th className="px-8 py-5">Litros</th>
                 <th className="px-8 py-5 text-right">Custo</th>
+                <th className="px-8 py-5 text-right">Ações</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-50">
@@ -286,6 +290,36 @@ const MileageDashboard: React.FC<MileageDashboardProps> = ({ state, onAdd }) => 
                   <td className="px-8 py-4 text-xs font-bold text-slate-700">{rec.liters} L</td>
                   <td className="px-8 py-4 text-right">
                     <span className="text-xs font-black text-primary">{formatCurrency(rec.cost)}</span>
+                  </td>
+                  <td className="px-8 py-4 text-right">
+                    <div className="flex items-center justify-end gap-1">
+                      {onEdit && (
+                        <button
+                          onClick={() => onEdit(rec)}
+                          className="p-1 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors"
+                          title="Editar"
+                        >
+                          <span className="material-symbols-outlined text-[18px]">edit</span>
+                        </button>
+                      )}
+                      {onDelete && (
+                        <button
+                          onClick={async () => {
+                            const confirmed = onConfirmRequest
+                              ? await onConfirmRequest('Tem certeza que deseja remover este registo de quilometragem?')
+                              : confirm('Tem certeza que deseja remover este registo de quilometragem?');
+
+                            if (confirmed) {
+                              onDelete(rec.id);
+                            }
+                          }}
+                          className="p-1 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
+                          title="Remover"
+                        >
+                          <span className="material-symbols-outlined text-[18px]">delete</span>
+                        </button>
+                      )}
+                    </div>
                   </td>
                 </tr>
               ))}

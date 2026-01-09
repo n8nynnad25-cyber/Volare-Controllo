@@ -7,20 +7,23 @@ interface MileageFormProps {
   state?: AppState;
   onSubmit: (record: MileageRecord | MileageRecord[]) => void;
   onCancel: () => void;
+  onNotify?: (message: string, type: 'success' | 'error' | 'info') => void;
+  onConfirmRequest?: (message: string) => Promise<boolean>;
+  initialData?: MileageRecord;
 }
 
-const MileageForm: React.FC<MileageFormProps> = ({ state, onSubmit, onCancel }) => {
+const MileageForm: React.FC<MileageFormProps> = ({ state, onSubmit, onCancel, onNotify, onConfirmRequest, initialData }) => {
   const [activeTab, setActiveTab] = useState<'manual' | 'import'>('manual');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // State for Manual Form
   const [formData, setFormData] = useState({
-    date: new Date().toISOString().split('T')[0],
-    vehicle: 'Honda CG 160 (KXP-9921)',
-    kmInitial: '',
-    kmFinal: '',
-    liters: '',
-    cost: ''
+    date: initialData?.date || new Date().toISOString().split('T')[0],
+    vehicle: initialData?.vehicle || '',
+    kmInitial: initialData?.kmInitial.toString() || '',
+    kmFinal: initialData?.kmFinal.toString() || '',
+    liters: initialData?.liters.toString() || '',
+    cost: initialData?.cost.toString() || ''
   });
 
   // State for Import
@@ -32,11 +35,20 @@ const MileageForm: React.FC<MileageFormProps> = ({ state, onSubmit, onCancel }) 
 
   const kmPercorridos = (parseFloat(formData.kmFinal) || 0) - (parseFloat(formData.kmInitial) || 0);
 
-  const handleSubmitManual = (e: React.FormEvent) => {
+  const handleSubmitManual = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
 
     if (!formData.kmFinal || !formData.liters) return;
+
+    const confirmed = onConfirmRequest
+      ? await onConfirmRequest('Deseja confirmar o registo desta quilometragem?')
+      : confirm('Deseja confirmar o registo desta quilometragem?');
+
+    if (!confirmed) {
+      onNotify?.('O registo não foi gravado.', 'error');
+      return;
+    }
 
     if ((parseFloat(formData.kmFinal) || 0) <= (parseFloat(formData.kmInitial) || 0)) {
       setError("A quilometragem final deve ser maior que a inicial.");
@@ -110,23 +122,25 @@ const MileageForm: React.FC<MileageFormProps> = ({ state, onSubmit, onCancel }) 
         {/* Navigation Tabs */}
         <div className="p-8 border-b border-slate-100 bg-slate-50/50 flex flex-col md:flex-row justify-between items-center gap-6">
           <div className="flex flex-col text-center md:text-left">
-            <h3 className="text-xl font-black text-slate-900 tracking-tight uppercase">Registo de Quilometragem</h3>
-            <p className="text-sm text-slate-500 font-medium italic">Escolha o método de entrada de dados.</p>
+            <h3 className="text-xl font-black text-slate-900 tracking-tight uppercase">{initialData ? 'Editar Registo' : 'Registo de Quilometragem'}</h3>
+            <p className="text-sm text-slate-500 font-medium italic">{initialData ? 'Altere os dados abaixo.' : 'Escolha o método de entrada de dados.'}</p>
           </div>
-          <div className="flex bg-slate-200 p-1 rounded-xl shadow-inner shrink-0">
-            <button
-              onClick={() => setActiveTab('manual')}
-              className={`px-6 py-2.5 text-xs font-black uppercase rounded-lg transition-all ${activeTab === 'manual' ? 'bg-white text-primary shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
-            >
-              Manual
-            </button>
-            <button
-              onClick={() => setActiveTab('import')}
-              className={`px-6 py-2.5 text-xs font-black uppercase rounded-lg transition-all ${activeTab === 'import' ? 'bg-white text-primary shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
-            >
-              Importar CSV
-            </button>
-          </div>
+          {!initialData && (
+            <div className="flex bg-slate-200 p-1 rounded-xl shadow-inner shrink-0">
+              <button
+                onClick={() => setActiveTab('manual')}
+                className={`px-6 py-2.5 text-xs font-black uppercase rounded-lg transition-all ${activeTab === 'manual' ? 'bg-white text-primary shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+              >
+                Manual
+              </button>
+              <button
+                onClick={() => setActiveTab('import')}
+                className={`px-6 py-2.5 text-xs font-black uppercase rounded-lg transition-all ${activeTab === 'import' ? 'bg-white text-primary shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+              >
+                Importar CSV
+              </button>
+            </div>
+          )}
         </div>
 
         {activeTab === 'manual' ? (
@@ -155,20 +169,12 @@ const MileageForm: React.FC<MileageFormProps> = ({ state, onSubmit, onCancel }) 
                   onChange={e => setFormData(p => ({ ...p, vehicle: e.target.value }))}
                 >
                   <option value="">Selecionar veículo...</option>
-                  {state && state.vehicles && state.vehicles.length > 0 ? (
+                  {state && state.vehicles && state.vehicles.length > 0 && (
                     state.vehicles.map(veh => (
                       <option key={veh.id} value={`${veh.model} (${veh.plate})`}>
                         {veh.model} ({veh.plate})
                       </option>
                     ))
-                  ) : (
-                    // Fallback
-                    <>
-                      <option>Honda CG 160 (KXP-9921)</option>
-                      <option>Yamaha Factor (JKL-1029)</option>
-                      <option>Honda Biz (ABC-1234)</option>
-                      <option>Mercedes Sprinter (XX-99-XX)</option>
-                    </>
                   )}
                 </select>
               </label>
@@ -347,7 +353,17 @@ const MileageForm: React.FC<MileageFormProps> = ({ state, onSubmit, onCancel }) 
                     Descartar
                   </button>
                   <button
-                    onClick={() => onSubmit(previewData)}
+                    onClick={async () => {
+                      const confirmed = onConfirmRequest
+                        ? await onConfirmRequest(`Deseja confirmar o registo de ${previewData.length} quilometragens?`)
+                        : confirm(`Deseja confirmar o registo de ${previewData.length} quilometragens?`);
+
+                      if (confirmed) {
+                        onSubmit(previewData);
+                      } else {
+                        onNotify?.('O registo não foi gravado.', 'error');
+                      }
+                    }}
                     className="px-10 py-3 bg-emerald-600 text-white rounded-xl font-black uppercase tracking-widest text-xs shadow-lg shadow-emerald-200 hover:bg-emerald-700 transition-all flex items-center gap-2"
                   >
                     <span className="material-symbols-outlined text-[18px]">done_all</span>
