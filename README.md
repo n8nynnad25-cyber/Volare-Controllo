@@ -18,3 +18,15 @@ View your app in AI Studio: https://ai.studio/apps/drive/15e4IDsddcxOeVqGU2af4uf
 2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
 3. Run the app:
    `npm run dev`
+
+## Deploy to Vercel
+
+1. Create a new project on [Vercel](https://vercel.com/new).
+2. Connect your repository.
+3. Configure the following **Environment Variables** in the Vercel dashboard:
+   - `GEMINI_API_KEY`: Your Gemini API key.
+   - `VITE_SUPABASE_URL`: Your Supabase URL.
+   - `VITE_SUPABASE_ANON_KEY`: Your Supabase Anon Key.
+4. Click **Deploy**.
+
+The project is already configured with `vercel.json` to handle client-side routing.
