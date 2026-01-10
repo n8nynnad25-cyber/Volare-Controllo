@@ -64,16 +64,8 @@ const App: React.FC = () => {
       if (session?.user) {
         mapUser(session.user);
       } else {
-        // AUTO-LOGIN FOR TESTING
-        setUser({
-          id: 'b4d06863-601a-43c2-a241-02bc3dbd534f',
-          name: 'Carlos Silva (Test)',
-          email: 'test@volare.com',
-          role: 'Administrador',
-          avatar: 'https://ui-avatars.com/api/?name=Carlos+Silva'
-        });
-        // setUser(null);
-        // setView('dashboard');
+        setUser(null);
+        setView('login');
       }
     });
 
