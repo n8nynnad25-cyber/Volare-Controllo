@@ -22,10 +22,10 @@ const MileageDashboard: React.FC<MileageDashboardProps> = ({ state, onAdd, onEdi
     const rows = state.mileageRecords.map(rec => [
       new Date(rec.date).toLocaleDateString('pt-BR'),
       rec.vehicle,
-      rec.driver || 'Não Informado',
-      rec.km_start,
-      rec.km_end,
-      rec.km_end - rec.km_start,
+      (rec as any).driver || 'Não Informado',
+      rec.kmInitial,
+      rec.kmFinal,
+      rec.kmFinal - rec.kmInitial,
       rec.liters,
       rec.cost
     ]);

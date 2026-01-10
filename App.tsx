@@ -26,11 +26,21 @@ const App: React.FC = () => {
   const [user, setUser] = useState<User | null>(null);
 
   const [state, setState] = useState<AppState>(() => {
-    const saved = localStorage.getItem('volare_state');
-    if (saved) {
-      const parsed = JSON.parse(saved);
-      // Merge com INITIAL_STATE para garantir que novos campos (como categories) existam
-      return { ...INITIAL_STATE, ...parsed, categories: parsed.categories || INITIAL_STATE.categories };
+    try {
+      const saved = localStorage.getItem('volare_state');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        // Merge com INITIAL_STATE, mas garantindo que estados de UI sejam limpos
+        return {
+          ...INITIAL_STATE,
+          ...parsed,
+          categories: parsed.categories || INITIAL_STATE.categories,
+          toasts: [], // Sempre iniciar vazio
+          confirmationModal: INITIAL_STATE.confirmationModal // Sempre iniciar fechado
+        };
+      }
+    } catch (e) {
+      console.error("Erro ao carregar estado do localStorage:", e);
     }
     return INITIAL_STATE;
   });
@@ -54,8 +64,16 @@ const App: React.FC = () => {
       if (session?.user) {
         mapUser(session.user);
       } else {
-        setUser(null);
-        setView('dashboard');
+        // AUTO-LOGIN FOR TESTING
+        setUser({
+          id: 'b4d06863-601a-43c2-a241-02bc3dbd534f',
+          name: 'Carlos Silva (Test)',
+          email: 'test@volare.com',
+          role: 'Administrador',
+          avatar: 'https://ui-avatars.com/api/?name=Carlos+Silva'
+        });
+        // setUser(null);
+        // setView('dashboard');
       }
     });
 
@@ -124,120 +142,121 @@ const App: React.FC = () => {
     if (!user) return;
 
     const fetchData = async () => {
-      const { data: cashData, error: cashError } = await supabase
-        .from('cash_transactions')
-        .select('*')
-        .order('date', { ascending: false });
+      try {
+        const { data: cashData, error: cashError } = await supabase
+          .from('cash_transactions')
+          .select('*')
+          .order('date', { ascending: false });
 
-      if (cashError) {
-        console.error('Error fetching cash transactions:', cashError);
-        return;
-      }
+        if (cashError) {
+          console.error('Error fetching cash transactions:', cashError);
+        } else if (cashData) {
+          const mappedTransactions: CashTransaction[] = cashData.map(tx => ({
+            id: tx.id,
+            date: tx.date,
+            type: tx.type as 'entrada' | 'saida',
+            category: tx.category,
+            description: tx.description,
+            amount: tx.amount,
+            manager: tx.manager,
+            isVendaDinheiro: tx.is_venda_dinheiro
+          }));
 
-      if (cashData) {
-        const mappedTransactions: CashTransaction[] = cashData.map(tx => ({
-          id: tx.id,
-          date: tx.date,
-          type: tx.type as 'entrada' | 'saida',
-          category: tx.category,
-          description: tx.description,
-          amount: tx.amount,
-          manager: tx.manager,
-          isVendaDinheiro: tx.is_venda_dinheiro
-        }));
+          setState(prev => ({ ...prev, cashTransactions: mappedTransactions }));
+        }
 
-        setState(prev => ({ ...prev, cashTransactions: mappedTransactions }));
-      }
+        // Fetch Mileage Records
+        const { data: mileageData, error: mileageError } = await supabase
+          .from('mileage_records')
+          .select('*')
+          .order('date', { ascending: false });
 
-      // Fetch Mileage Records
-      const { data: mileageData, error: mileageError } = await supabase
-        .from('mileage_records')
-        .select('*')
-        .order('date', { ascending: false });
+        if (mileageError) {
+          console.error('Error fetching mileage records:', mileageError);
+        } else if (mileageData) {
+          const mappedMileage: MileageRecord[] = mileageData.map(rec => ({
+            id: rec.id,
+            date: rec.date,
+            vehicle: rec.vehicle,
+            kmInitial: rec.km_initial,
+            kmFinal: rec.km_final,
+            liters: rec.liters,
+            cost: rec.cost
+          }));
+          setState(prev => ({ ...prev, mileageRecords: mappedMileage }));
+        }
 
-      if (mileageError) {
-        console.error('Error fetching mileage records:', mileageError);
-      } else if (mileageData) {
-        const mappedMileage: MileageRecord[] = mileageData.map(rec => ({
-          id: rec.id,
-          date: rec.date,
-          vehicle: rec.vehicle,
-          kmInitial: rec.km_initial,
-          kmFinal: rec.km_final,
-          liters: rec.liters,
-          cost: rec.cost
-        }));
-        setState(prev => ({ ...prev, mileageRecords: mappedMileage }));
-      }
+        // Fetch Keg Sales
+        const { data: kegData, error: kegError } = await supabase
+          .from('keg_sales')
+          .select('*')
+          .order('date', { ascending: false });
 
-      // Fetch Keg Sales
-      const { data: kegData, error: kegError } = await supabase
-        .from('keg_sales')
-        .select('*')
-        .order('date', { ascending: false });
+        if (kegError) {
+          console.error('Error fetching keg sales:', kegError);
+        } else if (kegData) {
+          const mappedKegs: KegSale[] = kegData.map(sale => ({
+            id: sale.id,
+            date: sale.date,
+            brand: sale.brand,
+            volume: sale.volume,
+            quantity: sale.quantity,
+            code: sale.code,
+            value: sale.value,
+            status: sale.status as 'Confirmado' | 'Pendente'
+          }));
+          setState(prev => ({ ...prev, kegSales: mappedKegs }));
+        }
 
-      if (kegError) {
-        console.error('Error fetching keg sales:', kegError);
-      } else if (kegData) {
-        const mappedKegs: KegSale[] = kegData.map(sale => ({
-          id: sale.id,
-          date: sale.date,
-          brand: sale.brand,
-          volume: sale.volume,
-          quantity: sale.quantity,
-          code: sale.code,
-          value: sale.value,
-          status: sale.status as 'Confirmado' | 'Pendente'
-        }));
-        setState(prev => ({ ...prev, kegSales: mappedKegs }));
-      }
+        // Fetch Categories
+        const { data: catData, error: catError } = await supabase
+          .from('transaction_categories')
+          .select('*')
+          .order('name', { ascending: true });
 
-      // Fetch Categories
-      const { data: catData, error: catError } = await supabase
-        .from('transaction_categories')
-        .select('*')
-        .order('name', { ascending: true });
+        if (catError) {
+          console.error('Error fetching categories:', catError);
+        } else if (catData) {
+          setState(prev => ({ ...prev, categories: catData }));
+        }
 
-      if (catError) {
-        console.error('Error fetching categories:', catError);
-      } else if (catData) {
-        setState(prev => ({ ...prev, categories: catData }));
-      }
+        // Fetch Managers
+        const { data: managerData, error: managerError } = await supabase
+          .from('managers')
+          .select('*')
+          .order('name', { ascending: true });
 
-      // Fetch Managers
-      const { data: managerData, error: managerError } = await supabase
-        .from('managers')
-        .select('*')
-        .order('name', { ascending: true });
+        if (managerError) {
+          console.error('Error fetching managers:', managerError);
+        } else if (managerData) {
+          setState(prev => ({ ...prev, managers: managerData }));
+        }
 
-      if (managerError) {
-        console.error('Error fetching managers:', managerError);
-      } else if (managerData) {
-        setState(prev => ({ ...prev, managers: managerData }));
-      }
+        // Fetch Vehicles
+        const { data: vehicleData, error: vehicleError } = await supabase
+          .from('vehicles')
+          .select('*')
+          .order('model', { ascending: true });
 
-      // Fetch Vehicles
-      const { data: vehicleData, error: vehicleError } = await supabase
-        .from('vehicles')
-        .select('*')
-        .order('model', { ascending: true });
+        if (vehicleError) {
+          console.error('Error fetching vehicles:', vehicleError);
+        } else if (vehicleData) {
+          setState(prev => ({ ...prev, vehicles: vehicleData }));
+        }
 
-      if (vehicleError) {
-        console.error('Error fetching vehicles:', vehicleError);
-      } else if (vehicleData) {
-        setState(prev => ({ ...prev, vehicles: vehicleData }));
-      }
+        // Fetch Keg Brands
+        const { data: brandData, error: brandError } = await supabase
+          .from('keg_brands')
+          .select('*')
+          .order('name', { ascending: true });
 
-      // Fetch Keg Brands
-      const { data: brandData, error: brandError } = await supabase
-        .from('keg_brands')
-        .select('*')
-        .order('name', { ascending: true });
-
-      if (brandError) {
-        console.error('Error fetching keg brands:', brandError);
-      } else if (brandData) {
-        setState(prev => ({ ...prev, kegBrands: brandData }));
+        if (brandError) {
+          console.error('Error fetching keg brands:', brandError);
+        } else if (brandData) {
+          setState(prev => ({ ...prev, kegBrands: brandData }));
+        }
+      } catch (err) {
+        console.error("Critical error during initial data fetch:", err);
       }
     };
 

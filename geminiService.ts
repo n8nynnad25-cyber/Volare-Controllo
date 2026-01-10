@@ -1,9 +1,22 @@
 import { GoogleGenAI } from "@google/genai";
 import { AppState } from "./types";
 
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+// The API key is defined in vite.config.ts from GEMINI_API_KEY env var
+const GEMINI_KEY = import.meta.env.VITE_GEMINI_API_KEY || (window as any).process?.env?.GEMINI_API_KEY || '';
+
+let ai: any = null;
+if (GEMINI_KEY) {
+  try {
+    ai = new GoogleGenAI({ apiKey: GEMINI_KEY });
+  } catch (error) {
+    console.error("Failed to initialize GoogleGenAI:", error);
+  }
+}
 
 export async function chatWithAI(userMessage: string, currentState: AppState) {
+  if (!ai) {
+    return "O assistente não está configurado. Verifique a chave de API do Gemini.";
+  }
   try {
     const systemPrompt = `Você é o assistente virtual do sistema Volare. 
     Você tem acesso aos dados atuais do sistema em formato JSON abaixo.

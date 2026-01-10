@@ -9,7 +9,7 @@ interface HeaderProps {
 const Header: React.FC<HeaderProps> = ({ view }) => {
   const getTitle = () => {
     switch (view) {
-      case 'dashboard': return 'Dashboard Geral';
+      case 'dashboard': return 'Análise';
       case 'cash-fund': return 'Fundo de Caixa';
       case 'cash-fund-new': return 'Novo Registo de Caixa';
       case 'mileage': return 'Dashboard de Quilometragem';

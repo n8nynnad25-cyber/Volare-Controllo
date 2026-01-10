@@ -11,7 +11,7 @@ interface SidebarProps {
 
 const Sidebar: React.FC<SidebarProps> = ({ currentView, onViewChange, user, onLogout }) => {
   const menuItems = [
-    { id: 'dashboard', label: 'Dashboard', icon: 'dashboard' },
+    { id: 'dashboard', label: 'Análise', icon: 'dashboard' },
     { id: 'cash-fund', label: 'Fundo de Caixa', icon: 'account_balance_wallet' },
     { id: 'mileage', label: 'Quilometragem', icon: 'speed' },
     { id: 'keg-sales', label: 'Venda de Barris', icon: 'propane_tank' },
