@@ -24,6 +24,7 @@ const App: React.FC = () => {
   const [editingMileageRecord, setEditingMileageRecord] = useState<MileageRecord | null>(null);
   const [editingKegSale, setEditingKegSale] = useState<KegSale | null>(null);
   const [user, setUser] = useState<User | null>(null);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
   const [state, setState] = useState<AppState>(() => {
     try {
@@ -918,6 +919,50 @@ const App: React.FC = () => {
     }
   };
 
+  const clearData = async () => {
+    const confirmed = await showConfirm(
+      '⚠️ PERIGO: Tem certeza absoluta que deseja apagar TODOS os dados do sistema? Esta ação não pode ser desfeita e irá remover todas as transações, configurações e registros.'
+    );
+
+    if (!confirmed) return;
+
+    // Double confirmation for safety
+    // In a real app we might ask for typing "DELETE" or password, but here a simple double check is ok for now.
+    const doubleConfirmed = await showConfirm(
+      'Último aviso: Todos os dados serão perdidos permanentemente. Deseja realmente prosseguir para zerar o sistema?'
+    );
+
+    if (!doubleConfirmed) return;
+
+    try {
+      const userId = user?.id;
+      showToast('A limpar sistema...', 'info');
+
+      // Delete data in reverse order of dependencies (child tables first)
+
+      // 1. Transactions and records
+      await supabase.from('cash_transactions').delete().eq('user_id', userId);
+      await supabase.from('mileage_records').delete().eq('user_id', userId);
+      await supabase.from('keg_sales').delete().eq('user_id', userId);
+
+      // 2. Configuration tables
+      await supabase.from('transaction_categories').delete().eq('user_id', userId);
+      await supabase.from('vehicles').delete().eq('user_id', userId);
+      await supabase.from('managers').delete().eq('user_id', userId);
+      await supabase.from('keg_brands').delete().eq('user_id', userId);
+
+      showToast('Sistema reinualizado com sucesso! A recarregar...', 'success');
+
+      setTimeout(() => {
+        window.location.reload();
+      }, 2000);
+
+    } catch (error) {
+      console.error("Erro ao limpar dados:", error);
+      showToast('Erro ao limpar dados. Verifique o console.', 'error');
+    }
+  };
+
   if (!user) {
     return <LoginView onLogin={handleLogin} />;
   }
@@ -1054,6 +1099,7 @@ const App: React.FC = () => {
             onNotify={showToast}
             onConfirmRequest={showConfirm}
             onImportBackup={importBackup}
+            onClearData={clearData}
           />
         );
       default:
@@ -1063,9 +1109,16 @@ const App: React.FC = () => {
 
   return (
     <div className="flex h-screen w-full overflow-hidden">
-      <Sidebar currentView={view} onViewChange={setView} user={user} onLogout={handleLogout} />
+      <Sidebar
+        currentView={view}
+        onViewChange={setView}
+        user={user}
+        onLogout={handleLogout}
+        isOpen={isSidebarOpen}
+        onClose={() => setIsSidebarOpen(false)}
+      />
       <div className="flex flex-1 flex-col overflow-hidden bg-background-light relative">
-        <Header view={view} />
+        <Header view={view} onMenuClick={() => setIsSidebarOpen(true)} />
         <main className="flex-1 overflow-y-auto p-4 md:p-8 custom-scrollbar">
           <div className="max-w-[1600px] mx-auto w-full">
             {renderView()}

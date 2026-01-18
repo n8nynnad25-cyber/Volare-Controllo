@@ -19,6 +19,7 @@ interface SettingsViewProps {
     onNotify?: (message: string, type: 'success' | 'error' | 'info') => void;
     onConfirmRequest?: (message: string) => Promise<boolean>;
     onImportBackup?: (data: any) => Promise<void>;
+    onClearData?: () => Promise<void>;
 }
 
 type Tab = 'general' | 'categories' | 'managers' | 'vehicles' | 'kegs';
@@ -40,7 +41,8 @@ const SettingsView: React.FC<SettingsViewProps> = ({
     onDeleteKegBrand,
     onNotify,
     onConfirmRequest,
-    onImportBackup
+    onImportBackup,
+    onClearData
 }) => {
     const [activeTab, setActiveTab] = useState<Tab>('general');
 
@@ -325,6 +327,30 @@ const SettingsView: React.FC<SettingsViewProps> = ({
                                                 />
                                             </label>
                                         </div>
+                                    </div>
+                                </div>
+
+                                {/* Danger Zone */}
+                                <div className="p-6 bg-red-50 rounded-2xl border border-red-100 space-y-4">
+                                    <div className="flex flex-col md:flex-row items-center md:items-start gap-4 text-center md:text-left">
+                                        <div className="p-3 bg-red-100 rounded-xl">
+                                            <span className="material-symbols-outlined text-red-600 text-[24px]">delete_forever</span>
+                                        </div>
+                                        <div className="flex-1">
+                                            <h4 className="font-bold text-red-700">Zona de Perigo</h4>
+                                            <p className="text-sm text-red-600/80 mt-1">
+                                                Esta ação irá apagar TODOS os dados do sistema (transações, vendas, registros). Esta ação é irreversível.
+                                            </p>
+                                        </div>
+                                        <button
+                                            onClick={() => {
+                                                if (onClearData) onClearData();
+                                            }}
+                                            className="w-full md:w-auto px-6 py-3 bg-red-600 text-white font-bold rounded-xl hover:bg-red-700 transition-all flex items-center justify-center gap-2 shadow-sm shadow-red-200"
+                                        >
+                                            <span className="material-symbols-outlined">warning</span>
+                                            Limpar Sistema
+                                        </button>
                                     </div>
                                 </div>
                             </div>
