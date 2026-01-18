@@ -13,7 +13,7 @@ interface CashFundFormProps {
 }
 
 const CashFundForm: React.FC<CashFundFormProps> = ({ state, onSubmit, onCancel, onNotify, onConfirmRequest, initialData }) => {
-  const [activeTab, setActiveTab] = useState<'manual' | 'import'>('manual');
+  const [activeTab, setActiveTab] = useState<'manual' | 'import' | 'transfer'>('manual');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [formData, setFormData] = useState({
@@ -24,6 +24,14 @@ const CashFundForm: React.FC<CashFundFormProps> = ({ state, onSubmit, onCancel, 
     description: initialData?.description || '',
     manager: initialData?.manager || '',
     isVendaDinheiro: initialData?.isVendaDinheiro || false
+  });
+
+  const [transferData, setTransferData] = useState({
+    date: new Date().toISOString().split('T')[0],
+    amount: '',
+    fromManager: '',
+    toManager: '',
+    description: ''
   });
 
   const [previewData, setPreviewData] = useState<CashTransaction[]>([]);
@@ -53,6 +61,51 @@ const CashFundForm: React.FC<CashFundFormProps> = ({ state, onSubmit, onCancel, 
       manager: formData.manager,
       isVendaDinheiro: formData.isVendaDinheiro
     });
+  };
+
+  const handleTransferSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!transferData.amount || !transferData.fromManager || !transferData.toManager) return;
+
+    if (transferData.fromManager === transferData.toManager) {
+      onNotify?.('O gerente de origem e destino devem ser diferentes.', 'error');
+      return;
+    }
+
+    const confirmed = onConfirmRequest
+      ? await onConfirmRequest(`Deseja confirmar a transferência de ${formatCurrency(parseFloat(transferData.amount))} de ${transferData.fromManager} para ${transferData.toManager}?`)
+      : confirm(`Deseja confirmar a transferência de ${formatCurrency(parseFloat(transferData.amount))} de ${transferData.fromManager} para ${transferData.toManager}?`);
+
+    if (!confirmed) {
+      onNotify?.('A transferência não foi gravada.', 'error');
+      return;
+    }
+
+    const amountVal = parseFloat(transferData.amount);
+
+    const exitTx: CashTransaction = {
+      id: Math.random().toString(36).substr(2, 9),
+      type: 'saida',
+      date: transferData.date,
+      amount: amountVal,
+      category: 'Transferência',
+      description: `Transferência para ${transferData.toManager} ${transferData.description ? '- ' + transferData.description : ''}`,
+      manager: transferData.fromManager,
+      isVendaDinheiro: false
+    };
+
+    const entryTx: CashTransaction = {
+      id: Math.random().toString(36).substr(2, 9),
+      type: 'entrada',
+      date: transferData.date,
+      amount: amountVal,
+      category: 'Transferência',
+      description: `Transferência de ${transferData.fromManager} ${transferData.description ? '- ' + transferData.description : ''}`,
+      manager: transferData.toManager,
+      isVendaDinheiro: false
+    };
+
+    onSubmit([exitTx, entryTx]);
   };
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -155,6 +208,12 @@ const CashFundForm: React.FC<CashFundFormProps> = ({ state, onSubmit, onCancel, 
                 className={`px-4 py-1.5 text-xs font-bold rounded-md transition-all ${activeTab === 'import' ? 'bg-white text-primary shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
               >
                 Importar CSV / Excel
+              </button>
+              <button
+                onClick={() => setActiveTab('transfer')}
+                className={`px-4 py-1.5 text-xs font-bold rounded-md transition-all ${activeTab === 'transfer' ? 'bg-white text-primary shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+              >
+                Transferência
               </button>
             </div>
           )}
@@ -294,6 +353,123 @@ const CashFundForm: React.FC<CashFundFormProps> = ({ state, onSubmit, onCancel, 
               >
                 <span className="material-symbols-outlined text-[18px]">save</span>
                 Salvar Registo
+              </button>
+            </div>
+          </form>
+        ) : activeTab === 'transfer' ? (
+          <form onSubmit={handleTransferSubmit} className="p-8 space-y-8 animate-in slide-in-from-right-4 duration-300">
+            <div className="bg-blue-50/50 border border-blue-100 p-4 rounded-xl flex items-start gap-3">
+              <span className="material-symbols-outlined text-blue-600 mt-0.5">swap_horiz</span>
+              <div>
+                <h4 className="text-sm font-bold text-blue-900">Transferência entre Gerentes</h4>
+                <p className="text-xs text-blue-700 mt-1">
+                  Esta operação criará automaticamente uma saída no gerente de origem e uma entrada correspondente no gerente de destino.
+                </p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 relative">
+              <div className="space-y-1">
+                <label className="block text-sm font-bold text-slate-700">De (Origem)</label>
+                <div className="relative">
+                  <select
+                    required
+                    className="block w-full rounded-lg border-slate-200 focus:ring-primary focus:border-primary pl-10"
+                    value={transferData.fromManager}
+                    onChange={e => setTransferData(p => ({ ...p, fromManager: e.target.value }))}
+                  >
+                    <option value="">Selecionar origem...</option>
+                    {state.managers && state.managers.length > 0 ? (
+                      state.managers.map(mgr => (
+                        <option key={mgr.id} value={mgr.name}>{mgr.name}</option>
+                      ))
+                    ) : (
+                      state.cashTransactions.map(t => t.manager).filter((v, i, a) => a.indexOf(v) === i).map(m => (
+                        <option key={m} value={m}>{m}</option>
+                      ))
+                    )}
+                  </select>
+                  <span className="material-symbols-outlined absolute left-3 top-2.5 text-slate-400 text-[20px]">person_remove</span>
+                </div>
+              </div>
+
+              {/* Arrow Indicator for Desktop */}
+              <div className="hidden md:flex absolute left-1/2 top-8 -translate-x-1/2 justify-center items-center pointer-events-none z-10 bg-white rounded-full p-1 border border-slate-100 shadow-sm text-slate-300">
+                <span className="material-symbols-outlined">arrow_forward</span>
+              </div>
+
+              <div className="space-y-1">
+                <label className="block text-sm font-bold text-slate-700">Para (Destino)</label>
+                <div className="relative">
+                  <select
+                    required
+                    className="block w-full rounded-lg border-slate-200 focus:ring-primary focus:border-primary pl-10"
+                    value={transferData.toManager}
+                    onChange={e => setTransferData(p => ({ ...p, toManager: e.target.value }))}
+                  >
+                    <option value="">Selecionar destino...</option>
+                    {state.managers && state.managers.length > 0 ? (
+                      state.managers.map(mgr => (
+                        <option key={mgr.id} value={mgr.name}>{mgr.name}</option>
+                      ))
+                    ) : (
+                      state.cashTransactions.map(t => t.manager).filter((v, i, a) => a.indexOf(v) === i).map(m => (
+                        <option key={m} value={m}>{m}</option>
+                      ))
+                    )}
+                  </select>
+                  <span className="material-symbols-outlined absolute left-3 top-2.5 text-slate-400 text-[20px]">person_add</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="space-y-1">
+                <label className="block text-sm font-bold text-slate-700">Data da Transferência</label>
+                <input
+                  type="date"
+                  required
+                  className="block w-full rounded-lg border-slate-200 focus:ring-primary focus:border-primary"
+                  value={transferData.date}
+                  onChange={e => setTransferData(p => ({ ...p, date: e.target.value }))}
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="block text-sm font-bold text-slate-700">Valor a Transferir (MT)</label>
+                <input
+                  type="number" step="0.01" required min="0.01"
+                  className="block w-full rounded-lg border-slate-200 focus:ring-primary focus:border-primary text-right font-mono"
+                  placeholder="0.00"
+                  value={transferData.amount}
+                  onChange={e => setTransferData(p => ({ ...p, amount: e.target.value }))}
+                />
+              </div>
+            </div>
+
+            <div className="space-y-1">
+              <label className="block text-sm font-bold text-slate-700">Motivo / Descrição</label>
+              <textarea
+                rows={2}
+                className="block w-full rounded-lg border-slate-200 focus:ring-primary focus:border-primary"
+                placeholder="Ex: Ajuste de caixa, Troco, etc..."
+                value={transferData.description}
+                onChange={e => setTransferData(p => ({ ...p, description: e.target.value }))}
+              />
+            </div>
+
+            <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-100">
+              <button
+                type="button" onClick={onCancel}
+                className="px-6 py-2.5 text-sm font-bold text-slate-700 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors"
+              >
+                Cancelar
+              </button>
+              <button
+                type="submit"
+                className="px-6 py-2.5 text-sm font-bold text-white bg-blue-600 rounded-lg hover:bg-blue-700 shadow-md shadow-blue-500/20 transition-all flex items-center gap-2"
+              >
+                <span className="material-symbols-outlined text-[18px]">sync_alt</span>
+                Confirmar Transferência
               </button>
             </div>
           </form>

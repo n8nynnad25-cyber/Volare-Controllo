@@ -1,10 +1,11 @@
 
 import React, { useState, useRef, useEffect } from 'react';
-import { AppState } from '../types';
+import { AppState, User } from '../types';
 import { chatWithAI } from '../geminiService';
 
 interface ChatbotProps {
   appState: AppState;
+  user: User | null;
 }
 
 interface Message {
@@ -13,10 +14,12 @@ interface Message {
   time: string;
 }
 
-const Chatbot: React.FC<ChatbotProps> = ({ appState }) => {
+const Chatbot: React.FC<ChatbotProps> = ({ appState, user }) => {
   const [isOpen, setIsOpen] = useState(false);
+  const userName = user?.name ? user.name.split(' ')[0] : 'Gestor';
+
   const [messages, setMessages] = useState<Message[]>([
-    { role: 'bot', text: '👋 Olá Carlos! Sou o assistente da Volare. Como posso ajudar com os dados de hoje?', time: '09:00' }
+    { role: 'bot', text: `👋 Olá ${userName}! Sou o assistente da Volare. Como posso ajudar com os dados de hoje?`, time: '09:00' }
   ]);
   const [input, setInput] = useState('');
   const [isTyping, setIsTyping] = useState(false);
@@ -38,11 +41,11 @@ const Chatbot: React.FC<ChatbotProps> = ({ appState }) => {
 
     setIsTyping(true);
     try {
-      const botResponse = await chatWithAI(userMsg, appState);
-      setMessages(prev => [...prev, { 
-        role: 'bot', 
-        text: botResponse || 'Desculpe, tive um problema ao processar sua consulta.', 
-        time: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) 
+      const botResponse = await chatWithAI(userMsg, appState, user?.name || 'Gestor');
+      setMessages(prev => [...prev, {
+        role: 'bot',
+        text: botResponse || 'Desculpe, tive um problema ao processar sua consulta.',
+        time: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
       }]);
     } catch (error) {
       console.error(error);
@@ -54,8 +57,17 @@ const Chatbot: React.FC<ChatbotProps> = ({ appState }) => {
 
   return (
     <>
-      <button 
-        onClick={() => setIsOpen(!isOpen)}
+      <button
+        onClick={() => {
+          if (!isOpen) {
+            setMessages([{
+              role: 'bot',
+              text: `👋 Olá ${userName}! Sou o assistente da Volare. Como posso ajudar com os dados de hoje?`,
+              time: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+            }]);
+          }
+          setIsOpen(!isOpen);
+        }}
         className="fixed bottom-8 right-8 z-50 flex h-16 w-16 items-center justify-center rounded-full bg-primary text-white shadow-xl shadow-primary/40 transition-all hover:scale-110 active:scale-95"
       >
         <span className="material-symbols-outlined text-[32px]">{isOpen ? 'close' : 'smart_toy'}</span>
@@ -112,8 +124,8 @@ const Chatbot: React.FC<ChatbotProps> = ({ appState }) => {
 
           <div className="p-4 bg-white border-t border-slate-100 flex-shrink-0">
             <div className="relative flex items-end gap-2 bg-slate-50 p-2 rounded-xl border border-slate-200 focus-within:ring-1 focus-within:ring-primary focus-within:border-primary transition-all">
-              <textarea 
-                className="w-full bg-transparent border-none focus:ring-0 p-2 text-sm text-slate-900 placeholder-slate-400 resize-none max-h-32 min-h-[40px]" 
+              <textarea
+                className="w-full bg-transparent border-none focus:ring-0 p-2 text-sm text-slate-900 placeholder-slate-400 resize-none max-h-32 min-h-[40px]"
                 placeholder="Pergunte sobre vendas, caixa..."
                 value={input}
                 rows={1}
@@ -125,7 +137,7 @@ const Chatbot: React.FC<ChatbotProps> = ({ appState }) => {
                   }
                 }}
               />
-              <button 
+              <button
                 onClick={handleSend}
                 disabled={isTyping}
                 className="p-2 bg-primary hover:bg-primary-hover text-white rounded-lg shadow-md transition-all disabled:opacity-50"

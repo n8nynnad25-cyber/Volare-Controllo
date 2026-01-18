@@ -18,6 +18,7 @@ interface SettingsViewProps {
     onDeleteKegBrand?: (id: string) => Promise<void>;
     onNotify?: (message: string, type: 'success' | 'error' | 'info') => void;
     onConfirmRequest?: (message: string) => Promise<boolean>;
+    onImportBackup?: (data: any) => Promise<void>;
 }
 
 type Tab = 'general' | 'categories' | 'managers' | 'vehicles' | 'kegs';
@@ -38,7 +39,8 @@ const SettingsView: React.FC<SettingsViewProps> = ({
     onUpdateKegBrand,
     onDeleteKegBrand,
     onNotify,
-    onConfirmRequest
+    onConfirmRequest,
+    onImportBackup
 }) => {
     const [activeTab, setActiveTab] = useState<Tab>('general');
 
@@ -284,16 +286,45 @@ const SettingsView: React.FC<SettingsViewProps> = ({
                                         <div className="flex-1">
                                             <h4 className="font-bold text-slate-800">Cópia de Segurança (Backup)</h4>
                                             <p className="text-sm text-slate-500 mt-1">
-                                                Descarregue todos os dados do sistema (transações, quilometragem, frota e gerência) num único ficheiro.
+                                                Faça o backup dos seus dados ou restaure uma versão anterior. O arquivo será salvo em formato JSON no seu computador.
                                             </p>
                                         </div>
-                                        <button
-                                            onClick={handleExportBackup}
-                                            className="w-full md:w-auto px-6 py-3 bg-primary text-white font-bold rounded-xl hover:bg-primary-dark transition-all flex items-center justify-center gap-2 shadow-sm"
-                                        >
-                                            <span className="material-symbols-outlined">download</span>
-                                            Exportar Backup
-                                        </button>
+                                        <div className="flex flex-col gap-2 w-full md:w-auto">
+                                            <button
+                                                onClick={handleExportBackup}
+                                                className="w-full md:w-auto px-6 py-3 bg-primary text-white font-bold rounded-xl hover:bg-primary-dark transition-all flex items-center justify-center gap-2 shadow-sm"
+                                            >
+                                                <span className="material-symbols-outlined">download</span>
+                                                Exportar Backup
+                                            </button>
+
+                                            <label className="w-full md:w-auto px-6 py-3 bg-white text-slate-600 font-bold rounded-xl border border-slate-200 hover:bg-slate-50 hover:border-slate-300 transition-all flex items-center justify-center gap-2 cursor-pointer shadow-sm">
+                                                <span className="material-symbols-outlined">upload_file</span>
+                                                Importar / Restaurar
+                                                <input
+                                                    type="file"
+                                                    accept=".json"
+                                                    className="hidden"
+                                                    onChange={(e) => {
+                                                        const file = e.target.files?.[0];
+                                                        if (file && onImportBackup) {
+                                                            const reader = new FileReader();
+                                                            reader.onload = (ev) => {
+                                                                try {
+                                                                    const data = JSON.parse(ev.target?.result as string);
+                                                                    onImportBackup(data);
+                                                                } catch (err) {
+                                                                    onNotify?.('Erro ao ler arquivo de backup.', 'error');
+                                                                }
+                                                            };
+                                                            reader.readAsText(file);
+                                                        }
+                                                        // Reset input value to allow same file selection again
+                                                        e.target.value = '';
+                                                    }}
+                                                />
+                                            </label>
+                                        </div>
                                     </div>
                                 </div>
                             </div>

@@ -797,6 +797,127 @@ const App: React.FC = () => {
     }));
   };
 
+  const importBackup = async (backupData: any) => {
+    if (!backupData || !backupData.data) {
+      showToast('Formato de backup inválido.', 'error');
+      return;
+    }
+
+    const confirmed = await showConfirm(
+      'Atenção: A importação irá adicionar ou atualizar os dados existentes. Recomenda-se exportar um backup atual antes de prosseguir. Deseja continuar?'
+    );
+
+    if (!confirmed) return;
+
+    try {
+      const { data } = backupData;
+      const userId = user?.id;
+
+      showToast('Iniciando restauração...', 'info');
+
+      // 1. Restore Categories
+      if (data.categories && data.categories.length > 0) {
+        const cats = data.categories.map((c: any) => ({
+          id: c.id,
+          name: c.name,
+          user_id: userId
+        }));
+        await supabase.from('transaction_categories').upsert(cats);
+      }
+
+      // 2. Restore Managers
+      if (data.managers && data.managers.length > 0) {
+        const mgrs = data.managers.map((m: any) => ({
+          id: m.id,
+          name: m.name,
+          role: m.role,
+          user_id: userId
+        }));
+        await supabase.from('managers').upsert(mgrs);
+      }
+
+      // 3. Restore Vehicles
+      if (data.vehicles && data.vehicles.length > 0) {
+        const vehs = data.vehicles.map((v: any) => ({
+          id: v.id,
+          model: v.model,
+          plate: v.plate,
+          type: v.type,
+          user_id: userId
+        }));
+        await supabase.from('vehicles').upsert(vehs);
+      }
+
+      // 4. Restore Keg Brands
+      if (data.kegBrands && data.kegBrands.length > 0) {
+        const brands = data.kegBrands.map((b: any) => ({
+          id: b.id,
+          name: b.name,
+          user_id: userId
+        }));
+        await supabase.from('keg_brands').upsert(brands);
+      }
+
+      // 5. Restore Cash Transactions
+      if (data.cashTransactions && data.cashTransactions.length > 0) {
+        const txs = data.cashTransactions.map((t: any) => ({
+          id: t.id,
+          date: t.date,
+          type: t.type,
+          category: t.category,
+          description: t.description,
+          amount: t.amount,
+          manager: t.manager,
+          is_venda_dinheiro: t.isVendaDinheiro,
+          user_id: userId
+        }));
+        await supabase.from('cash_transactions').upsert(txs);
+      }
+
+      // 6. Restore Mileage Records
+      if (data.mileageRecords && data.mileageRecords.length > 0) {
+        const recs = data.mileageRecords.map((r: any) => ({
+          id: r.id,
+          date: r.date,
+          vehicle: r.vehicle,
+          km_initial: r.kmInitial,
+          km_final: r.kmFinal,
+          liters: r.liters,
+          cost: r.cost,
+          user_id: userId
+        }));
+        await supabase.from('mileage_records').upsert(recs);
+      }
+
+      // 7. Restore Keg Sales
+      if (data.kegSales && data.kegSales.length > 0) {
+        const sales = data.kegSales.map((s: any) => ({
+          id: s.id,
+          date: s.date,
+          brand: s.brand,
+          volume: s.volume,
+          quantity: s.quantity,
+          code: s.code,
+          value: s.value,
+          status: s.status,
+          user_id: userId
+        }));
+        await supabase.from('keg_sales').upsert(sales);
+      }
+
+      showToast('Backup restaurado com sucesso! A recarregar...', 'success');
+
+      // Force reload to update state
+      setTimeout(() => {
+        window.location.reload();
+      }, 2000);
+
+    } catch (error) {
+      console.error("Erro na restauração:", error);
+      showToast('Erro ao restaurar backup. Verifique o console.', 'error');
+    }
+  };
+
   if (!user) {
     return <LoginView onLogin={handleLogin} />;
   }
@@ -932,6 +1053,7 @@ const App: React.FC = () => {
             onDeleteKegBrand={deleteKegBrand}
             onNotify={showToast}
             onConfirmRequest={showConfirm}
+            onImportBackup={importBackup}
           />
         );
       default:
@@ -949,7 +1071,7 @@ const App: React.FC = () => {
             {renderView()}
           </div>
         </main>
-        <Chatbot appState={state} />
+        <Chatbot appState={state} user={user} />
       </div>
       <Toast toasts={state.toasts} onRemove={removeToast} />
       <ConfirmationModal state={state.confirmationModal} />
