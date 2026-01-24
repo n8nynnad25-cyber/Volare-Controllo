@@ -75,8 +75,9 @@ const LoginView: React.FC<LoginViewProps> = ({ onLogin }) => {
             </p>
           </div>
 
-          <div className="text-sm text-white/60 font-medium">
-            © 2024 Volare Sistemas. Todos os direitos reservados.
+          <div className="text-sm text-white/60 font-medium flex flex-col gap-1">
+            <p>© 2026 Volare Restaurante. Todos os direitos reservados.</p>
+            <p>Desenvolvido por DALMITECH & CONSULTORIA. EI</p>
           </div>
         </div>
       </div>
