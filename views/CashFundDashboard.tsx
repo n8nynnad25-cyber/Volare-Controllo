@@ -10,7 +10,7 @@ import { exportToCSV } from '../src/utils/csvExport';
 
 interface CashFundDashboardProps {
   state: AppState;
-  onAdd: () => void;
+  onAdd?: () => void; // Opcional para controle de permissão
   onEdit?: (tx: CashTransaction) => void;
   onDelete?: (id: string) => void;
   onConfirmRequest?: (message: string) => Promise<boolean>;
@@ -62,10 +62,12 @@ const CashFundDashboard: React.FC<CashFundDashboardProps> = ({ state, onAdd, onE
           <h2 className="text-3xl font-black text-slate-900 tracking-tight">Fundo de Caixa</h2>
           <p className="text-sm text-slate-500 font-medium italic">Gestão e análise de fluxos financeiros por gestão.</p>
         </div>
-        <button onClick={onAdd} className="bg-primary text-white px-6 py-3 rounded-xl text-sm font-bold hover:bg-primary-hover flex items-center gap-2 shadow-lg shadow-primary/20 transition-all hover:-translate-y-0.5 active:scale-95">
-          <span className="material-symbols-outlined">add_card</span>
-          Novo Movimento
-        </button>
+        {onAdd && (
+          <button onClick={onAdd} className="bg-primary text-white px-6 py-3 rounded-xl text-sm font-bold hover:bg-primary-hover flex items-center gap-2 shadow-lg shadow-primary/20 transition-all hover:-translate-y-0.5 active:scale-95">
+            <span className="material-symbols-outlined">add_card</span>
+            Novo Movimento
+          </button>
+        )}
       </div>
 
       {/* Global Summary Cards */}

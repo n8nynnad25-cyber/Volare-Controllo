@@ -12,7 +12,7 @@ import { getBrandColor } from '../src/utils/colors';
 
 interface KegSalesDashboardProps {
   state: AppState;
-  onAdd: () => void;
+  onAdd?: () => void;
   onEdit?: (sale: KegSale) => void;
   onDelete?: (id: string) => void;
   onConfirmRequest?: (message: string) => Promise<boolean>;
@@ -115,10 +115,12 @@ const KegSalesDashboard: React.FC<KegSalesDashboardProps> = ({ state, onAdd, onE
               ))}
             </select>
           </div>
-          <button onClick={onAdd} className="bg-primary text-white px-6 py-3 rounded-xl text-sm font-black hover:bg-primary-hover flex items-center gap-2 shadow-lg shadow-primary/20 transition-all hover:scale-105 active:scale-95 uppercase tracking-widest">
-            <span className="material-symbols-outlined text-[20px]">add_box</span>
-            Nova Venda
-          </button>
+          {onAdd && (
+            <button onClick={onAdd} className="bg-primary text-white px-6 py-3 rounded-xl text-sm font-black hover:bg-primary-hover flex items-center gap-2 shadow-lg shadow-primary/20 transition-all hover:scale-105 active:scale-95 uppercase tracking-widest">
+              <span className="material-symbols-outlined text-[20px]">add_box</span>
+              Nova Venda
+            </button>
+          )}
         </div>
       </div>
 

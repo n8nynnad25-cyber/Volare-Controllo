@@ -1,11 +1,12 @@
 
 import React from 'react';
 import { ViewType, User } from '../types';
+import { canConfigure } from '../src/utils/permissions';
 
 interface SidebarProps {
   currentView: ViewType;
   onViewChange: (view: ViewType) => void;
-  user: User;
+  user: User | null;
   onLogout: () => void | Promise<void>;
   isOpen: boolean;
   onClose: () => void;
@@ -23,6 +24,8 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, onViewChange, user, onLo
     onViewChange(id as ViewType);
     onClose(); // Close sidebar on mobile when item clicked
   };
+
+  if (!user) return null;
 
   return (
     <>
@@ -66,16 +69,18 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, onViewChange, user, onLo
         </nav>
 
         <div className="border-t border-white/10 px-4 py-4 space-y-1">
-          <button
-            onClick={() => handleItemClick('settings')}
-            className={`w-full group flex items-center gap-3 rounded-lg px-3 py-3 transition-all ${currentView === 'settings'
-              ? 'bg-primary text-white shadow-md'
-              : 'text-sidebar-text hover:bg-white/5 hover:text-white'
-              }`}
-          >
-            <span className="material-symbols-outlined">settings</span>
-            <span className="text-sm font-medium">Configurações</span>
-          </button>
+          {canConfigure(user.role) && (
+            <button
+              onClick={() => handleItemClick('settings')}
+              className={`w-full group flex items-center gap-3 rounded-lg px-3 py-3 transition-all ${currentView === 'settings'
+                ? 'bg-primary text-white shadow-md'
+                : 'text-sidebar-text hover:bg-white/5 hover:text-white'
+                }`}
+            >
+              <span className="material-symbols-outlined">settings</span>
+              <span className="text-sm font-medium">Configurações</span>
+            </button>
+          )}
 
           <div className="mt-4 flex flex-col gap-2 rounded-xl bg-white/5 p-4 border border-white/5">
             <div className="flex items-center gap-3">
@@ -85,7 +90,7 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, onViewChange, user, onLo
               />
               <div className="flex flex-col overflow-hidden">
                 <span className="truncate text-sm font-bold text-white">{user.name}</span>
-                <span className="truncate text-xs text-sidebar-text">{user.role}</span>
+                <span className="truncate text-xs text-sidebar-text">{user.role === 'manager' ? 'Gerente' : user.role === 'boss' ? 'Visualizador' : 'Admin'}</span>
               </div>
             </div>
             <button

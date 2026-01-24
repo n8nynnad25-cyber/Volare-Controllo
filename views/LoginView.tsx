@@ -1,6 +1,7 @@
+
 import React, { useState } from 'react';
 import { supabase } from '../src/lib/supabase';
-import { User } from '../types';
+import { User, UserRole } from '../types';
 
 interface LoginViewProps {
   onLogin: (user: User) => void;
@@ -33,7 +34,7 @@ const LoginView: React.FC<LoginViewProps> = ({ onLogin }) => {
           id: data.user.id,
           name: data.user.user_metadata.name || email.split('@')[0], // Fallback para parte do email
           email: data.user.email || '',
-          role: data.user.user_metadata.role || 'Usuário',
+          role: (data.user.user_metadata.role as UserRole) || 'manager', // Default safer
           avatar: data.user.user_metadata.avatar_url || 'https://ui-avatars.com/api/?name=' + (email.split('@')[0])
         };
         onLogin(user);
@@ -44,6 +45,7 @@ const LoginView: React.FC<LoginViewProps> = ({ onLogin }) => {
       setIsLoading(false);
     }
   };
+
 
   return (
     <div className="flex h-screen w-full bg-white overflow-hidden">
@@ -80,79 +82,78 @@ const LoginView: React.FC<LoginViewProps> = ({ onLogin }) => {
       </div>
 
       {/* Coluna da Direita: Formulário */}
-      <div className="w-full lg:w-1/2 flex items-center justify-center p-8 bg-slate-50">
-        <div className="w-full max-w-md bg-white rounded-2xl shadow-xl p-10 border border-slate-100 animate-in fade-in zoom-in-95 duration-500">
-          <div className="mb-10 text-center lg:text-left">
-            <div className="lg:hidden flex items-center justify-center gap-2 mb-6 text-primary">
-              <span className="material-symbols-outlined text-[40px]">rocket_launch</span>
-              <span className="text-3xl font-black">VOLARE</span>
-            </div>
-            <h3 className="text-2xl font-black text-slate-900 mb-2">Bem-vindo de volta!</h3>
-            <p className="text-slate-500">Por favor, insira suas credenciais para acessar o sistema.</p>
-          </div>
-
-          <form onSubmit={handleSubmit} className="space-y-6">
-            <div className="space-y-2">
-              <label className="text-sm font-bold text-slate-700 block">E-mail Corporativo</label>
-              <div className="relative">
-                <span className="material-symbols-outlined absolute left-4 top-3 text-slate-400">mail</span>
-                <input
-                  type="email"
-                  required
-                  className="w-full pl-12 pr-4 h-12 bg-slate-50 border-slate-200 rounded-xl focus:ring-primary focus:border-primary transition-all text-sm"
-                  placeholder="exemplo@volare.com.br"
-                  value={email}
-                  onChange={e => setEmail(e.target.value)}
-                />
+      <div className="w-full lg:w-1/2 flex items-center justify-center p-8 bg-slate-50 overflow-y-auto">
+        <div className="w-full max-w-md space-y-8 animate-in fade-in zoom-in-95 duration-500">
+          <div className="bg-white rounded-2xl shadow-xl p-10 border border-slate-100">
+            <div className="mb-8 text-center lg:text-left">
+              <div className="lg:hidden flex items-center justify-center gap-2 mb-6 text-primary">
+                <span className="material-symbols-outlined text-[40px]">rocket_launch</span>
+                <span className="text-3xl font-black">VOLARE</span>
               </div>
+              <h3 className="text-2xl font-black text-slate-900 mb-2">Bem-vindo de volta!</h3>
+              <p className="text-slate-500">Por favor, insira suas credenciais.</p>
             </div>
 
-            <div className="space-y-2">
-              <label className="text-sm font-bold text-slate-700 block">Senha</label>
-              <div className="relative">
-                <span className="material-symbols-outlined absolute left-4 top-3 text-slate-400">lock</span>
-                <input
-                  type="password"
-                  required
-                  className="w-full pl-12 pr-4 h-12 bg-slate-50 border-slate-200 rounded-xl focus:ring-primary focus:border-primary transition-all text-sm"
-                  placeholder="••••••••"
-                  value={password}
-                  onChange={e => setPassword(e.target.value)}
-                />
+            <form onSubmit={handleSubmit} className="space-y-6">
+              <div className="space-y-2">
+                <label className="text-sm font-bold text-slate-700 block">E-mail Corporativo</label>
+                <div className="relative">
+                  <span className="material-symbols-outlined absolute left-4 top-3 text-slate-400">mail</span>
+                  <input
+                    type="email"
+                    required
+                    className="w-full pl-12 pr-4 h-12 bg-slate-50 border-slate-200 rounded-xl focus:ring-primary focus:border-primary transition-all text-sm"
+                    placeholder="exemplo@volare.com.br"
+                    value={email}
+                    onChange={e => setEmail(e.target.value)}
+                  />
+                </div>
               </div>
-            </div>
 
-            {error && (
-              <div className="p-3 bg-rose-50 border border-rose-100 rounded-lg text-xs font-bold text-rose-600 flex items-center gap-2 animate-in shake">
-                <span className="material-symbols-outlined text-[16px]">error</span>
-                {error}
+              <div className="space-y-2">
+                <label className="text-sm font-bold text-slate-700 block">Senha</label>
+                <div className="relative">
+                  <span className="material-symbols-outlined absolute left-4 top-3 text-slate-400">lock</span>
+                  <input
+                    type="password"
+                    required
+                    className="w-full pl-12 pr-4 h-12 bg-slate-50 border-slate-200 rounded-xl focus:ring-primary focus:border-primary transition-all text-sm"
+                    placeholder="••••••••"
+                    value={password}
+                    onChange={e => setPassword(e.target.value)}
+                  />
+                </div>
               </div>
-            )}
 
-            <div className="flex items-center gap-2">
-              <input type="checkbox" id="remember" className="rounded text-primary focus:ring-primary border-slate-300" />
-              <label htmlFor="remember" className="text-xs text-slate-600 font-medium cursor-pointer">Manter conectado neste dispositivo</label>
-            </div>
-
-            <button
-              type="submit"
-              disabled={isLoading}
-              className="w-full h-14 bg-primary hover:bg-primary-hover text-white rounded-xl font-bold shadow-lg shadow-primary/30 transition-all flex items-center justify-center gap-2 group"
-            >
-              {isLoading ? (
-                <div className="h-5 w-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
-              ) : (
-                <>
-                  <span>Entrar no Sistema</span>
-                  <span className="material-symbols-outlined group-hover:translate-x-1 transition-transform">arrow_forward</span>
-                </>
+              {error && (
+                <div className="p-3 bg-rose-50 border border-rose-100 rounded-lg text-xs font-bold text-rose-600 flex items-center gap-2 animate-in shake">
+                  <span className="material-symbols-outlined text-[16px]">error</span>
+                  {error}
+                </div>
               )}
-            </button>
-          </form>
 
-          <div className="mt-8 pt-8 border-t border-slate-100">
-            <p className="text-center text-xs text-slate-400">Acesso restrito a funcionários autorizados.</p>
+              <div className="flex items-center gap-2">
+                <input type="checkbox" id="remember" className="rounded text-primary focus:ring-primary border-slate-300" />
+                <label htmlFor="remember" className="text-xs text-slate-600 font-medium cursor-pointer">Manter conectado</label>
+              </div>
+
+              <button
+                type="submit"
+                disabled={isLoading}
+                className="w-full h-14 bg-primary hover:bg-primary-hover text-white rounded-xl font-bold shadow-lg shadow-primary/30 transition-all flex items-center justify-center gap-2 group"
+              >
+                {isLoading ? (
+                  <div className="h-5 w-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                ) : (
+                  <>
+                    <span>Entrar no Sistema</span>
+                    <span className="material-symbols-outlined group-hover:translate-x-1 transition-transform">arrow_forward</span>
+                  </>
+                )}
+              </button>
+            </form>
           </div>
+
         </div>
       </div>
     </div>

@@ -10,7 +10,7 @@ import { exportToCSV } from '../src/utils/csvExport';
 
 interface MileageDashboardProps {
   state: AppState;
-  onAdd: () => void;
+  onAdd?: () => void;
   onEdit?: (record: MileageRecord) => void;
   onDelete?: (id: string) => void;
   onConfirmRequest?: (message: string) => Promise<boolean>;
@@ -100,10 +100,12 @@ const MileageDashboard: React.FC<MileageDashboardProps> = ({ state, onAdd, onEdi
               onChange={(e) => setSelectedMonth(e.target.value)}
             />
           </div>
-          <button onClick={onAdd} className="bg-primary text-white px-6 py-3 rounded-xl text-sm font-bold hover:bg-primary-hover flex items-center gap-2 shadow-lg shadow-primary/20 transition-all hover:scale-[1.02] active:scale-95">
-            <span className="material-symbols-outlined text-[20px]">add_road</span>
-            Novo Registo
-          </button>
+          {onAdd && (
+            <button onClick={onAdd} className="bg-primary text-white px-6 py-3 rounded-xl text-sm font-bold hover:bg-primary-hover flex items-center gap-2 shadow-lg shadow-primary/20 transition-all hover:scale-[1.02] active:scale-95">
+              <span className="material-symbols-outlined text-[20px]">add_road</span>
+              Novo Registo
+            </button>
+          )}
         </div>
       </div>
 

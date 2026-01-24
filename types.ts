@@ -1,11 +1,13 @@
 
 export type ViewType = 'dashboard' | 'cash-fund' | 'cash-fund-new' | 'cash-fund-edit' | 'mileage' | 'mileage-new' | 'mileage-edit' | 'keg-sales' | 'keg-sales-new' | 'keg-sales-edit' | 'settings';
 
+export type UserRole = 'admin' | 'manager' | 'boss';
+
 export interface User {
   id: string;
   name: string;
   email: string;
-  role: string;
+  role: UserRole; // Agora tipado estritamente
   avatar: string;
 }
 

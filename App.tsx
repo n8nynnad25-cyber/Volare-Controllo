@@ -1,6 +1,6 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
-import { ViewType, AppState, CashTransaction, MileageRecord, KegSale, User, TransactionCategory, Manager, Vehicle, KegBrand } from './types';
+import { ViewType, AppState, CashTransaction, MileageRecord, KegSale, User, TransactionCategory, Manager, Vehicle, KegBrand, UserRole } from './types';
 import { INITIAL_STATE } from './constants';
 import Sidebar from './components/Sidebar';
 import Header from './components/Header';
@@ -17,6 +17,7 @@ import Chatbot from './components/Chatbot';
 import Toast from './components/Toast';
 import ConfirmationModal from './components/ConfirmationModal';
 import { supabase } from './src/lib/supabase';
+import { canCreate, canEdit, canDelete, canConfigure, canUseChatbot } from './src/utils/permissions';
 
 const App: React.FC = () => {
   const [view, setView] = useState<ViewType>('dashboard');
@@ -75,12 +76,25 @@ const App: React.FC = () => {
 
   const mapUser = (supabaseUser: any) => {
     if (!supabaseUser) return;
+
+    // Normalizar a role vinda do Supabase para os nossos tipos internos
+    const rawRole = supabaseUser.user_metadata?.role?.toLowerCase() || '';
+    let userRole: UserRole = 'manager'; // Default seguro (Gerente tem permissões médias)
+
+    if (rawRole.includes('admin') || rawRole.includes('administrador')) {
+      userRole = 'admin';
+    } else if (rawRole.includes('boss')) {
+      userRole = 'boss';
+    } else if (rawRole.includes('manager') || rawRole.includes('gerente')) {
+      userRole = 'manager';
+    }
+
     setUser({
       id: supabaseUser.id,
       name: supabaseUser.user_metadata.name || supabaseUser.email?.split('@')[0] || 'Usuário',
       email: supabaseUser.email || '',
-      role: supabaseUser.user_metadata.role || 'Usuário',
-      avatar: supabaseUser.user_metadata.avatar_url || 'https://ui-avatars.com/api/?name=' + (supabaseUser.email?.split('@')[0] || 'U')
+      role: userRole,
+      avatar: supabaseUser.user_metadata.avatar_url || `https://ui-avatars.com/api/?name=${supabaseUser.email?.split('@')[0] || 'U'}&background=random`
     });
   };
 
@@ -967,6 +981,60 @@ const App: React.FC = () => {
     }
   };
 
+  const handleAddSystemUser = async (data: { name: string, email: string, password: string, role: string }) => {
+    try {
+      const { error } = await supabase.functions.invoke('create-user', {
+        body: data
+      });
+
+      if (error) {
+        console.error("Erro ao criar utilizador:", error);
+
+        let errorMessage = "Erro desconhecido ao criar utilizador.";
+
+        // Try to parse detailed error from function response
+        // Try to parse detailed error from function response
+        if (typeof error === 'object' && error !== null) {
+          // Check if it's a FunctionsHttpError-like object with context
+          // @ts-ignore
+          if (error.context && typeof error.context.json === 'function') {
+            try {
+              // @ts-ignore
+              const body = await error.context.json();
+
+              if (body.details) {
+                errorMessage = body.details;
+                // Clean up "Auth session missing!" noise if present
+                if (errorMessage.includes("Auth session missing")) errorMessage = "Sessão expirada. Faça login novamente.";
+              } else if (body.error) {
+                errorMessage = body.error;
+              }
+            } catch (e) {
+              console.error("Failed to parse error body JSON", e);
+              // Fallback to text if json fails
+              try {
+                // @ts-ignore
+                const text = await error.context.text();
+                if (text) errorMessage = `Erro: ${text}`;
+              } catch (t) { }
+            }
+          } else if ('message' in error) {
+            // @ts-ignore
+            errorMessage = error.message;
+          }
+        }
+
+        showToast(errorMessage, 'error');
+        return;
+      }
+
+      showToast(`Utilizador ${data.name} criado com sucesso!`, 'success');
+    } catch (err: any) {
+      console.error("Erro na chamada da função:", err);
+      showToast(`Erro de conexão: ${err.message}`, 'error');
+    }
+  };
+
   if (!user) {
     return <LoginView onLogin={handleLogin} />;
   }
@@ -979,15 +1047,15 @@ const App: React.FC = () => {
         return (
           <CashFundDashboard
             state={state}
-            onAdd={() => {
+            onAdd={canCreate(user.role) ? () => {
               setEditingTransaction(null);
               setView('cash-fund-new');
-            }}
-            onEdit={(tx) => {
+            } : undefined}
+            onEdit={canEdit(user.role) ? (tx) => {
               setEditingTransaction(tx);
               setView('cash-fund-edit');
-            }}
-            onDelete={deleteCashTransaction}
+            } : undefined}
+            onDelete={canDelete(user.role) ? deleteCashTransaction : undefined}
             onConfirmRequest={showConfirm}
           />
         );
@@ -1015,15 +1083,15 @@ const App: React.FC = () => {
         return (
           <MileageDashboard
             state={state}
-            onAdd={() => {
+            onAdd={canCreate(user.role) ? () => {
               setEditingMileageRecord(null);
               setView('mileage-new');
-            }}
-            onEdit={(record) => {
+            } : undefined}
+            onEdit={canEdit(user.role) ? (record) => {
               setEditingMileageRecord(record);
               setView('mileage-edit');
-            }}
-            onDelete={deleteMileageRecord}
+            } : undefined}
+            onDelete={canDelete(user.role) ? deleteMileageRecord : undefined}
             onConfirmRequest={showConfirm}
           />
         );
@@ -1051,15 +1119,15 @@ const App: React.FC = () => {
         return (
           <KegSalesDashboard
             state={state}
-            onAdd={() => {
+            onAdd={canCreate(user.role) ? () => {
               setEditingKegSale(null);
               setView('keg-sales-new');
-            }}
-            onEdit={(sale) => {
+            } : undefined}
+            onEdit={canEdit(user.role) ? (sale) => {
               setEditingKegSale(sale);
               setView('keg-sales-edit');
-            }}
-            onDelete={deleteKegSale}
+            } : undefined}
+            onDelete={canDelete(user.role) ? deleteKegSale : undefined}
             onConfirmRequest={showConfirm}
           />
         );
@@ -1084,9 +1152,25 @@ const App: React.FC = () => {
           />
         );
       case 'settings':
+        if (!canConfigure(user.role)) {
+          return (
+            <div className="flex flex-col items-center justify-center h-full text-slate-400 animate-in fade-in zoom-in duration-300">
+              <span className="material-symbols-outlined text-6xl mb-4 text-slate-300">lock_person</span>
+              <h2 className="font-black text-2xl text-slate-700 mb-2">Acesso Restrito</h2>
+              <p className="text-sm font-medium opacity-70 mb-6">Você não tem permissão para aceder às configurações.</p>
+              <button
+                onClick={() => setView('dashboard')}
+                className="px-6 py-2 bg-primary text-white rounded-lg font-bold hover:bg-primary-hover transition-colors shadow-lg shadow-primary/20"
+              >
+                Voltar ao Painel
+              </button>
+            </div>
+          );
+        }
         return (
           <SettingsView
             state={state}
+            user={user}
             onNavigate={setView}
             onAddCategory={addCategory}
             onUpdateCategory={updateCategory}
@@ -1104,6 +1188,7 @@ const App: React.FC = () => {
             onConfirmRequest={showConfirm}
             onImportBackup={importBackup}
             onClearData={clearData}
+            onCreateSystemUser={handleAddSystemUser}
           />
         );
       default:
@@ -1128,7 +1213,7 @@ const App: React.FC = () => {
             {renderView()}
           </div>
         </main>
-        <Chatbot appState={state} user={user} />
+        {canUseChatbot(user.role) && <Chatbot appState={state} user={user} />}
       </div>
       <Toast toasts={state.toasts} onRemove={removeToast} />
       <ConfirmationModal state={state.confirmationModal} />

@@ -1,8 +1,10 @@
 import React, { useState } from 'react';
-import { AppState, ViewType } from '../types';
+import { AppState, ViewType, User } from '../types';
+import { supabase } from '../src/lib/supabase';
 
 interface SettingsViewProps {
     state: AppState;
+    user: User;
     onNavigate: (view: ViewType) => void;
     onAddCategory?: (name: string) => Promise<void>;
     onUpdateCategory?: (id: string, name: string) => Promise<void>;
@@ -20,12 +22,14 @@ interface SettingsViewProps {
     onConfirmRequest?: (message: string) => Promise<boolean>;
     onImportBackup?: (data: any) => Promise<void>;
     onClearData?: () => Promise<void>;
+    onCreateSystemUser?: (data: { name: string, email: string, password: string, role: string }) => Promise<void>;
 }
 
-type Tab = 'general' | 'categories' | 'managers' | 'vehicles' | 'kegs';
+type Tab = 'general' | 'users' | 'categories' | 'managers' | 'vehicles' | 'kegs';
 
 const SettingsView: React.FC<SettingsViewProps> = ({
     state,
+    user,
     onNavigate,
     onAddCategory,
     onUpdateCategory,
@@ -42,9 +46,18 @@ const SettingsView: React.FC<SettingsViewProps> = ({
     onNotify,
     onConfirmRequest,
     onImportBackup,
-    onClearData
+    onClearData,
+    onCreateSystemUser
 }) => {
     const [activeTab, setActiveTab] = useState<Tab>('general');
+
+    const isDemoUser = user.id.startsWith('demo-');
+
+    // System User Local State
+    const [sysName, setSysName] = useState('');
+    const [sysEmail, setSysEmail] = useState('');
+    const [sysPassword, setSysPassword] = useState('');
+    const [sysRole, setSysRole] = useState('manager');
 
     // Category Local State
     const [newCategoryName, setNewCategoryName] = useState('');
@@ -253,14 +266,103 @@ const SettingsView: React.FC<SettingsViewProps> = ({
                 {/* Sidebar Tabs */}
                 <div className="w-full lg:w-64 flex flex-col gap-2">
                     <TabButton active={activeTab === 'general'} onClick={() => setActiveTab('general')} label="Geral" icon="settings" />
+                    <TabButton active={activeTab === 'users'} onClick={() => setActiveTab('users')} label="Utilizadores (Login)" icon="manage_accounts" />
                     <TabButton active={activeTab === 'categories'} onClick={() => setActiveTab('categories')} label="Categorias" icon="category" />
-                    <TabButton active={activeTab === 'managers'} onClick={() => setActiveTab('managers')} label="Gerência" icon="badge" />
+                    <TabButton active={activeTab === 'managers'} onClick={() => setActiveTab('managers')} label="Gerentes (Assinaturas)" icon="badge" />
                     <TabButton active={activeTab === 'vehicles'} onClick={() => setActiveTab('vehicles')} label="Veículos" icon="motorcycle" />
                     <TabButton active={activeTab === 'kegs'} onClick={() => setActiveTab('kegs')} label="Barris" icon="local_drink" />
                 </div>
 
                 {/* Content Area */}
                 <div className="flex-1 bg-white rounded-3xl border border-slate-100 shadow-sm p-8 min-h-[500px]">
+
+                    {activeTab === 'users' && (
+                        <div className="space-y-8">
+                            <div className="flex justify-between items-center border-b border-slate-100 pb-4">
+                                <h3 className="text-xl font-black text-slate-800 uppercase">Criar Login de Acesso</h3>
+                            </div>
+
+                            <div className="bg-slate-50 p-6 rounded-2xl border border-slate-100 space-y-6">
+                                {isDemoUser && (
+                                    <div className="p-4 bg-amber-50 border border-amber-100 rounded-xl flex items-center gap-3 text-amber-800 text-sm font-bold mb-4">
+                                        <span className="material-symbols-outlined">warning</span>
+                                        <span>Modo Demo: Funcionalidade indisponível. Faça login com uma conta real.</span>
+                                    </div>
+                                )}
+                                <div className={`grid grid-cols-1 md:grid-cols-2 gap-6 ${isDemoUser ? 'opacity-50 pointer-events-none' : ''}`}>
+                                    <div className="space-y-2">
+                                        <label className="text-sm font-bold text-slate-700">Nome Completo</label>
+                                        <input
+                                            type="text"
+                                            value={sysName}
+                                            onChange={e => setSysName(e.target.value)}
+                                            placeholder="Ex: Ana Souza"
+                                            className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary text-sm"
+                                        />
+                                    </div>
+                                    <div className="space-y-2">
+                                        <label className="text-sm font-bold text-slate-700">E-mail Corporativo</label>
+                                        <input
+                                            type="email"
+                                            value={sysEmail}
+                                            onChange={e => setSysEmail(e.target.value)}
+                                            placeholder="ana.souza@volare.com"
+                                            className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary text-sm"
+                                        />
+                                    </div>
+                                    <div className="space-y-2">
+                                        <label className="text-sm font-bold text-slate-700">Senha Inicial</label>
+                                        <input
+                                            type="text"
+                                            value={sysPassword}
+                                            onChange={e => setSysPassword(e.target.value)}
+                                            placeholder="Mínimo 6 caracteres"
+                                            className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary text-sm"
+                                        />
+                                    </div>
+                                    <div className="space-y-2">
+                                        <label className="text-sm font-bold text-slate-700">Cargo / Permissão</label>
+                                        <select
+                                            value={sysRole}
+                                            onChange={e => setSysRole(e.target.value)}
+                                            className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary text-sm bg-white"
+                                        >
+                                            <option value="admin">Administrador (Acesso Total)</option>
+                                            <option value="manager">Gerente (Operacional)</option>
+                                            <option value="boss">Boss (Visualização + Chat)</option>
+                                        </select>
+                                    </div>
+                                </div>
+
+                                <div className="flex justify-end pt-4">
+                                    <button
+                                        onClick={() => {
+                                            if (!isDemoUser && onCreateSystemUser && sysName && sysEmail && sysPassword) {
+                                                onCreateSystemUser({ name: sysName, email: sysEmail, password: sysPassword, role: sysRole });
+                                                setSysName('');
+                                                setSysEmail('');
+                                                setSysPassword('');
+                                                setSysRole('manager');
+                                            }
+                                        }}
+                                        disabled={isDemoUser || !sysName || !sysEmail || !sysPassword || !onCreateSystemUser}
+                                        className="px-8 py-3 bg-primary text-white font-bold rounded-xl hover:bg-primary-dark transition-all flex items-center gap-2 shadow-lg shadow-primary/20 disabled:opacity-50 disabled:cursor-not-allowed"
+                                    >
+                                        <span className="material-symbols-outlined">person_add</span>
+                                        Criar Utilizador
+                                    </button>
+                                </div>
+                            </div>
+
+                            <div className="p-4 bg-blue-50 text-blue-800 rounded-xl text-sm flex gap-3 items-start">
+                                <span className="material-symbols-outlined shrink-0">info</span>
+                                <p>
+                                    Ao criar um utilizador, ele poderá fazer login imediatamente com o e-mail e senha definidos.
+                                    O <strong>Cargo</strong> define o que ele pode ver e fazer no sistema (ex: Admin pode tudo, Gerente não pode apagar dados).
+                                </p>
+                            </div>
+                        </div>
+                    )}
 
                     {activeTab === 'general' && (
                         <div className="space-y-6">
