@@ -5,7 +5,7 @@ import { formatCurrency, parseCurrency } from '../src/utils/format';
 
 interface CashFundFormProps {
   state: AppState;
-  onSubmit: (tx: CashTransaction | CashTransaction[]) => void;
+  onSubmit: (tx: CashTransaction | CashTransaction[]) => Promise<void> | void;
   onCancel: () => void;
   onNotify?: (message: string, type: 'success' | 'error' | 'info') => void;
   onConfirmRequest?: (message: string) => Promise<boolean>;
@@ -129,28 +129,143 @@ const CashFundForm: React.FC<CashFundFormProps> = ({ state, onSubmit, onCancel, 
           throw new Error("O ficheiro está vazio.");
         }
 
-        const newTransactions: CashTransaction[] = lines.map((line, index) => {
-          // Detecta separador: ponto-e-vírgula (Excel PT) ou vírgula ou tab
-          const separator = line.includes(';') ? ';' : (line.includes('\t') ? '\t' : ',');
-          const parts = line.split(separator);
+        // Check if first line is header and skip it
+        const firstLine = lines[0].toLowerCase();
+        const hasHeader = firstLine.includes('data') && (firstLine.includes('categoria') || firstLine.includes('tipo'));
+        const dataLines = hasHeader ? lines.slice(1) : lines;
 
-          if (parts.length < 5) {
-            throw new Error(`Linha ${index + 1} inválida. O formato deve ser: Data;Tipo;Categoria;Descrição;Valor;Gerente;VD`);
+        // Filter out empty lines
+        const validLines = dataLines.filter(line => line.trim() !== '');
+
+        if (validLines.length < 1) {
+          throw new Error("O ficheiro não contém dados válidos (apenas cabeçalho ou linhas vazias).");
+        }
+
+        const errors: string[] = [];
+        const newTransactions: CashTransaction[] = [];
+
+        validLines.forEach((line, index) => {
+          const lineNumber = index + 1 + (hasHeader ? 1 : 0);
+
+          try {
+            // Detecta separador: ponto-e-vírgula (Excel PT) ou vírgula ou tab
+            const separator = line.includes(';') ? ';' : (line.includes('\t') ? '\t' : ',');
+            const parts = line.split(separator);
+
+            if (parts.length < 5) {
+              errors.push(`Linha ${lineNumber}: Número insuficiente de colunas (${parts.length}). Necessário pelo menos 5 colunas.`);
+              return;
+            }
+
+            // Nova ordem: DATA, CATEGORIA, DESCRIÇÃO, TIPO, VALOR, GERENTE, VD / SEM VD
+            const [date, category, description, type, amount, manager, vd] = parts.map(p => p.trim());
+
+            // Validate DATA field
+            let parsedDate = date;
+            if (!date) {
+              errors.push(`Linha ${lineNumber}: Campo DATA está vazio.`);
+              return;
+            }
+
+            // Try to parse, validate and convert date format
+            // Database always expects YYYY-MM-DD
+            if (/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+              // Already YYYY-MM-DD, fine
+              parsedDate = date;
+            } else if (/^\d{2}\/\d{2}\/\d{4}$/.test(date)) {
+              // DD/MM/YYYY -> Convert to YYYY-MM-DD
+              const [day, month, year] = date.split('/');
+              parsedDate = `${year}-${month}-${day}`;
+            } else if (/^\d{2}-\d{2}-\d{4}$/.test(date)) {
+              // DD-MM-YYYY -> Convert to YYYY-MM-DD
+              const [day, month, year] = date.split('-');
+              parsedDate = `${year}-${month}-${day}`;
+            } else {
+              // Invalid format
+              errors.push(`Linha ${lineNumber}: DATA inválida "${date}". Use o formato AAAA-MM-DD (ex: 2024-01-15) ou DD/MM/AAAA.`);
+              return;
+            }
+
+            // Validate CATEGORIA field
+            if (!category) {
+              errors.push(`Linha ${lineNumber}: Campo CATEGORIA está vazio.`);
+              return;
+            }
+
+            // Validate TIPO field
+            if (!type) {
+              errors.push(`Linha ${lineNumber}: Campo TIPO está vazio. Use "Entrada" ou "Saída".`);
+              return;
+            }
+
+            // Normalizar a string para remover acentos e caracteres especiais para comparação
+            // Ex: "Saída" -> "saida", "ENTRADA" -> "entrada"
+            const typeLower = type.toLowerCase().trim();
+            const typeNormalized = typeLower.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+
+            const isEntrada = typeNormalized.includes('ent');
+            const isSaida = typeNormalized.includes('sai') || typeLower.includes('saí'); // Verifica 'sai' (sem acento) e 'saí' (com acento) por segurança
+
+            if (!isEntrada && !isSaida) {
+              errors.push(`Linha ${lineNumber}: TIPO inválido "${type}". Use "Entrada" ou "Saída".`);
+              return;
+            }
+
+            // Validate VALOR field
+            if (!amount) {
+              errors.push(`Linha ${lineNumber}: Campo VALOR está vazio.`);
+              return;
+            }
+            const parsedAmount = parseCurrency(amount);
+            if (isNaN(parsedAmount) || parsedAmount <= 0) {
+              errors.push(`Linha ${lineNumber}: VALOR inválido "${amount}". Deve ser um número positivo (ex: 1500.00).`);
+              return;
+            }
+
+            // Validate GERENTE field
+            if (!manager) {
+              errors.push(`Linha ${lineNumber}: Campo GERENTE está vazio.`);
+              return;
+            }
+
+            // Validate VD field
+            const vdLower = vd?.toLowerCase() || '';
+            const validVdValues = ['vd', 'sem vd', 's', 'n', 'sim', 'não', 'nao', '1', '0', ''];
+            if (vd && !validVdValues.includes(vdLower)) {
+              errors.push(`Linha ${lineNumber}: VD/SEM VD inválido "${vd}". Use "VD", "SEM VD", "S", "N", "Sim" ou "Não".`);
+              return;
+            }
+            const isVD = vdLower === 'vd' || vdLower === 's' || vdLower === 'sim' || vdLower === '1';
+
+            newTransactions.push({
+              id: Math.random().toString(36).substr(2, 9),
+              date: parsedDate,
+              type: (isEntrada ? 'entrada' : 'saida') as 'entrada' | 'saida',
+              category: category,
+              description: description || '',
+              amount: parsedAmount,
+              manager: manager,
+              isVendaDinheiro: isVD
+            });
+          } catch (lineErr: any) {
+            errors.push(`Linha ${lineNumber}: Erro ao processar - ${lineErr.message}`);
           }
-
-          const [date, type, category, description, amount, manager, vd] = parts.map(p => p.trim());
-
-          return {
-            id: Math.random().toString(36).substr(2, 9),
-            date: date || new Date().toISOString().split('T')[0],
-            type: (type?.toLowerCase().includes('ent') ? 'entrada' : 'saida') as 'entrada' | 'saida',
-            category: category || 'Outros',
-            description: description || '',
-            amount: parseCurrency(amount),
-            manager: manager || 'Gerente Geral',
-            isVendaDinheiro: vd?.toLowerCase() === 's' || vd?.toLowerCase() === 'sim' || vd === '1'
-          };
         });
+
+        // If there are errors, show them
+        if (errors.length > 0) {
+          const maxErrorsToShow = 5;
+          let errorMessage = `Foram encontrados ${errors.length} erro(s) no ficheiro:\n\n`;
+          errorMessage += errors.slice(0, maxErrorsToShow).join('\n');
+          if (errors.length > maxErrorsToShow) {
+            errorMessage += `\n\n... e mais ${errors.length - maxErrorsToShow} erro(s). Corrija os primeiros erros e reimporte.`;
+          }
+          throw new Error(errorMessage);
+        }
+
+        if (newTransactions.length === 0) {
+          throw new Error("Nenhuma transação válida foi encontrada no ficheiro.");
+        }
 
         setPreviewData(newTransactions);
       } catch (err: any) {
@@ -161,7 +276,7 @@ const CashFundForm: React.FC<CashFundFormProps> = ({ state, onSubmit, onCancel, 
     };
 
     reader.onerror = () => {
-      setImportError("Erro ao ler o ficheiro.");
+      setImportError("Erro ao ler o ficheiro. Verifique se o ficheiro está corrompido ou tente novamente.");
       setIsProcessing(false);
     };
 
@@ -170,14 +285,27 @@ const CashFundForm: React.FC<CashFundFormProps> = ({ state, onSubmit, onCancel, 
 
   const handleConfirmImport = async () => {
     if (previewData.length > 0) {
-      const confirmed = onConfirmRequest
-        ? await onConfirmRequest(`Deseja confirmar o registo de ${previewData.length} movimentos?`)
-        : confirm(`Deseja confirmar o registo de ${previewData.length} movimentos?`);
+      try {
+        const confirmed = onConfirmRequest
+          ? await onConfirmRequest(`Deseja confirmar o registo de ${previewData.length} movimentos?`)
+          : confirm(`Deseja confirmar o registo de ${previewData.length} movimentos?`);
 
-      if (confirmed) {
-        onSubmit(previewData);
-      } else {
-        onNotify?.('O registo não foi gravado.', 'error');
+        if (confirmed) {
+          try {
+            await onSubmit(previewData);
+            onNotify?.(`${previewData.length} movimentos importados com sucesso!`, 'success');
+          } catch (submitError: any) {
+            console.error('Erro na submissão:', submitError);
+            setImportError(`Erro ao gravar os movimentos: ${submitError.message || 'Erro desconhecido. Tente novamente.'}`);
+            onNotify?.('Erro ao gravar os movimentos. Verifique os detalhes abaixo.', 'error');
+          }
+        } else {
+          onNotify?.('O registo não foi gravado.', 'error');
+        }
+      } catch (err: any) {
+        console.error('Erro geral na importação:', err);
+        setImportError(`Erro durante a confirmação: ${err.message || 'Erro desconhecido.'}`);
+        onNotify?.('Ocorreu um erro durante a importação.', 'error');
       }
     }
   };
@@ -276,14 +404,7 @@ const CashFundForm: React.FC<CashFundFormProps> = ({ state, onSubmit, onCancel, 
                       <option key={cat.id} value={cat.name}>{cat.name}</option>
                     ))
                   ) : (
-                    // Fallback in case state is empty initially (should not happen with sync issues, but safe)
-                    <>
-                      <option value="Alimentação">Alimentação</option>
-                      <option value="Transporte">Transporte</option>
-                      <option value="Manutenção">Manutenção</option>
-                      <option value="Vendas">Vendas / Reforço</option>
-                      <option value="Outros">Outros</option>
-                    </>
+                    <option value="" disabled>Nenhuma categoria configurada</option>
                   )}
                 </select>
               </div>
@@ -301,13 +422,7 @@ const CashFundForm: React.FC<CashFundFormProps> = ({ state, onSubmit, onCancel, 
                       <option key={mgr.id} value={mgr.name}>{mgr.name} - {mgr.role}</option>
                     ))
                   ) : (
-                    // Fallback in case state is empty initially
-                    <>
-                      <option value="Carlos Silva">Carlos Silva</option>
-                      <option value="Ana Paula">Ana Paula</option>
-                      <option value="Ricardo Gomes">Ricardo Gomes</option>
-                      <option value="Juliana Costa">Juliana Costa</option>
-                    </>
+                    <option value="" disabled>Nenhum gerente configurado</option>
                   )}
                 </select>
               </div>
@@ -475,25 +590,92 @@ const CashFundForm: React.FC<CashFundFormProps> = ({ state, onSubmit, onCancel, 
           </form>
         ) : (
           <div className="p-8 space-y-6">
+            {/* Download Template Section */}
+            <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 p-5 rounded-xl">
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div className="flex gap-4">
+                  <div className="bg-blue-100 p-3 rounded-xl h-fit">
+                    <span className="material-symbols-outlined text-blue-600 text-[28px]">download</span>
+                  </div>
+                  <div>
+                    <p className="text-sm font-bold text-slate-900">Baixar Ficheiro Modelo</p>
+                    <p className="text-xs text-slate-600 mt-1">
+                      Utilize este ficheiro modelo para garantir a correcta formatação dos dados antes da importação.
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => {
+                    // Create template CSV content with correct column order
+                    const headers = 'DATA;CATEGORIA;DESCRIÇÃO;TIPO;VALOR;GERENTE;VD / SEM VD';
+                    const exampleRow1 = '2024-01-15;Alimentação;Compra de mantimentos;Saída;1500.00;Carlos Silva;SEM VD';
+                    const exampleRow2 = '2024-01-16;Vendas;Venda do dia;Entrada;5000.00;Ana Paula;VD';
+                    const exampleRow3 = '2024-01-17;Transporte;Combustível;Saída;800.00;Ricardo Gomes;SEM VD';
+                    const templateContent = `${headers}\n${exampleRow1}\n${exampleRow2}\n${exampleRow3}`;
+
+                    // Create and download the file
+                    const blob = new Blob(['\ufeff' + templateContent], { type: 'text/csv;charset=utf-8;' });
+                    const link = document.createElement('a');
+                    link.href = URL.createObjectURL(blob);
+                    link.download = 'modelo_fundo_caixa.csv';
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+                    URL.revokeObjectURL(link.href);
+                    onNotify?.('Ficheiro modelo baixado com sucesso!', 'success');
+                  }}
+                  className="flex items-center gap-2 px-5 py-2.5 bg-blue-600 text-white text-sm font-bold rounded-lg hover:bg-blue-700 shadow-md shadow-blue-200 transition-all hover:-translate-y-0.5 whitespace-nowrap"
+                >
+                  <span className="material-symbols-outlined text-[18px]">file_download</span>
+                  Baixar Modelo CSV
+                </button>
+              </div>
+            </div>
+
+            {/* File Format Instructions */}
             <div className="bg-primary/5 border border-primary/10 p-5 rounded-xl flex gap-4">
               <div className="bg-primary/10 p-2 rounded-lg h-fit">
                 <span className="material-symbols-outlined text-primary">description</span>
               </div>
               <div>
-                <p className="text-sm font-bold text-slate-900">Preparação do Ficheiro</p>
-                <p className="text-xs text-slate-600 mt-1">O sistema aceita ficheiros <strong>.csv</strong> (separados por ponto e vírgula). No Excel, use "Guardar Como" e escolha "CSV (Separado por vírgulas)".</p>
+                <p className="text-sm font-bold text-slate-900">Estrutura do Ficheiro</p>
+                <p className="text-xs text-slate-600 mt-1">
+                  O ficheiro deve conter as seguintes colunas, <strong>nesta ordem exacta</strong>. Aceita-se ficheiros <strong>.csv</strong> (separados por ponto e vírgula).
+                </p>
                 <div className="mt-3 flex flex-wrap gap-2">
-                  <span className="bg-white border border-slate-200 px-2 py-1 rounded text-[10px] font-bold text-slate-500">Data</span>
-                  <span className="bg-white border border-slate-200 px-2 py-1 rounded text-[10px] font-bold text-slate-500">Tipo</span>
-                  <span className="bg-white border border-slate-200 px-2 py-1 rounded text-[10px] font-bold text-slate-500">Categoria</span>
-                  <span className="bg-white border border-slate-200 px-2 py-1 rounded text-[10px] font-bold text-slate-500">Descrição</span>
-                  <span className="bg-white border border-slate-200 px-2 py-1 rounded text-[10px] font-bold text-slate-500">Valor</span>
-                  <span className="bg-white border border-slate-200 px-2 py-1 rounded text-[10px] font-bold text-slate-500">Gerente</span>
-                  <span className="bg-white border border-slate-200 px-2 py-1 rounded text-[10px] font-bold text-slate-500">VD</span>
+                  <span className="bg-white border border-blue-200 px-3 py-1.5 rounded-lg text-[11px] font-bold text-blue-700 flex items-center gap-1">
+                    <span className="text-blue-400">1.</span> DATA
+                  </span>
+                  <span className="bg-white border border-blue-200 px-3 py-1.5 rounded-lg text-[11px] font-bold text-blue-700 flex items-center gap-1">
+                    <span className="text-blue-400">2.</span> CATEGORIA
+                  </span>
+                  <span className="bg-white border border-blue-200 px-3 py-1.5 rounded-lg text-[11px] font-bold text-blue-700 flex items-center gap-1">
+                    <span className="text-blue-400">3.</span> DESCRIÇÃO
+                  </span>
+                  <span className="bg-white border border-blue-200 px-3 py-1.5 rounded-lg text-[11px] font-bold text-blue-700 flex items-center gap-1">
+                    <span className="text-blue-400">4.</span> TIPO
+                  </span>
+                  <span className="bg-white border border-blue-200 px-3 py-1.5 rounded-lg text-[11px] font-bold text-blue-700 flex items-center gap-1">
+                    <span className="text-blue-400">5.</span> VALOR
+                  </span>
+                  <span className="bg-white border border-blue-200 px-3 py-1.5 rounded-lg text-[11px] font-bold text-blue-700 flex items-center gap-1">
+                    <span className="text-blue-400">6.</span> GERENTE
+                  </span>
+                  <span className="bg-white border border-blue-200 px-3 py-1.5 rounded-lg text-[11px] font-bold text-blue-700 flex items-center gap-1">
+                    <span className="text-blue-400">7.</span> VD / SEM VD
+                  </span>
+                </div>
+                <div className="mt-4 bg-white/50 border border-slate-200 rounded-lg p-3">
+                  <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2">Valores Aceites:</p>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs text-slate-600">
+                    <div><strong>TIPO:</strong> "Entrada" ou "Saída"</div>
+                    <div><strong>VD / SEM VD:</strong> "VD", "SEM VD", "S", "N", "Sim", "Não"</div>
+                  </div>
                 </div>
               </div>
             </div>
 
+            {/* Upload Drop Area */}
             <div
               onClick={triggerFileInput}
               className={`relative border-2 border-dashed rounded-2xl p-12 flex flex-col items-center justify-center transition-all cursor-pointer group ${previewData.length > 0 ? 'border-emerald-200 bg-emerald-50/30' : 'border-slate-200 hover:border-primary/40 hover:bg-slate-50'
@@ -533,9 +715,34 @@ const CashFundForm: React.FC<CashFundFormProps> = ({ state, onSubmit, onCancel, 
             </div>
 
             {importError && (
-              <div className="bg-rose-50 border border-rose-100 p-4 rounded-xl flex gap-3 text-rose-700 animate-in fade-in slide-in-from-top-1">
-                <span className="material-symbols-outlined">error</span>
-                <p className="text-sm font-bold">{importError}</p>
+              <div className="bg-rose-50 border border-rose-200 p-5 rounded-xl animate-in fade-in slide-in-from-top-1">
+                <div className="flex items-start gap-3">
+                  <div className="bg-rose-100 p-2 rounded-lg shrink-0">
+                    <span className="material-symbols-outlined text-rose-600 text-[24px]">error</span>
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <h4 className="text-sm font-bold text-rose-800 mb-2">Erro na Importação</h4>
+                    <div className="bg-white/70 border border-rose-100 rounded-lg p-3 max-h-[200px] overflow-y-auto">
+                      {importError.split('\n').map((line, idx) => (
+                        <p
+                          key={idx}
+                          className={`text-xs ${line.startsWith('Linha') ? 'text-rose-700 font-mono py-1 border-b border-rose-50 last:border-0' : 'text-rose-600 mb-2'}`}
+                        >
+                          {line.startsWith('Linha') && (
+                            <span className="inline-flex items-center justify-center w-5 h-5 bg-rose-100 text-rose-700 rounded text-[10px] font-bold mr-2">
+                              !
+                            </span>
+                          )}
+                          {line}
+                        </p>
+                      ))}
+                    </div>
+                    <div className="mt-3 flex items-center gap-2 text-xs text-rose-600">
+                      <span className="material-symbols-outlined text-[16px]">lightbulb</span>
+                      <span>Corrija os erros acima e reimporte o ficheiro.</span>
+                    </div>
+                  </div>
+                </div>
               </div>
             )}
 
@@ -550,27 +757,33 @@ const CashFundForm: React.FC<CashFundFormProps> = ({ state, onSubmit, onCancel, 
                     <thead className="bg-slate-50 text-slate-500 font-bold uppercase tracking-wider border-b border-slate-100">
                       <tr>
                         <th className="px-4 py-3">Data</th>
-                        <th className="px-4 py-3">Tipo</th>
                         <th className="px-4 py-3">Categoria</th>
                         <th className="px-4 py-3">Descrição</th>
-                        <th className="px-4 py-3">Gerente</th>
+                        <th className="px-4 py-3">Tipo</th>
                         <th className="px-4 py-3 text-right">Valor</th>
+                        <th className="px-4 py-3">Gerente</th>
+                        <th className="px-4 py-3">VD</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
                       {previewData.map((tx, idx) => (
                         <tr key={idx} className="hover:bg-slate-50">
                           <td className="px-4 py-2.5 font-medium text-slate-500">{tx.date}</td>
+                          <td className="px-4 py-2.5">{tx.category}</td>
+                          <td className="px-4 py-2.5 truncate max-w-[150px]">{tx.description}</td>
                           <td className="px-4 py-2.5">
                             <span className={`font-bold ${tx.type === 'entrada' ? 'text-emerald-600' : 'text-rose-600'}`}>
                               {tx.type === 'entrada' ? 'ENTRADA' : 'SAÍDA'}
                             </span>
                           </td>
-                          <td className="px-4 py-2.5">{tx.category}</td>
-                          <td className="px-4 py-2.5 truncate max-w-[150px]">{tx.description}</td>
-                          <td className="px-4 py-2.5 font-bold">{tx.manager}</td>
                           <td className={`px-4 py-2.5 text-right font-mono font-bold ${tx.type === 'entrada' ? 'text-emerald-700' : 'text-rose-700'}`}>
                             {formatCurrency(tx.amount)}
+                          </td>
+                          <td className="px-4 py-2.5 font-bold">{tx.manager}</td>
+                          <td className="px-4 py-2.5">
+                            <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${tx.isVendaDinheiro ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}>
+                              {tx.isVendaDinheiro ? 'VD' : 'SEM VD'}
+                            </span>
                           </td>
                         </tr>
                       ))}

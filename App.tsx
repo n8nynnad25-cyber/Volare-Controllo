@@ -278,8 +278,8 @@ const App: React.FC = () => {
 
     if (error) {
       console.error("Erro ao salvar transação:", error);
-      showToast("O registo não foi gravado.", "error");
-      return;
+      showToast(`Erro ao gravar registo: ${error.message || 'Erro de base de dados'}`, "error");
+      throw error; // Lança o erro para que o formulário saiba que falhou
     }
 
     showToast("Registado com sucesso.", "success");
@@ -951,7 +951,11 @@ const App: React.FC = () => {
       await supabase.from('managers').delete().eq('user_id', userId);
       await supabase.from('keg_brands').delete().eq('user_id', userId);
 
-      showToast('Sistema reinualizado com sucesso! A recarregar...', 'success');
+      // Limpar cache local para garantir que não sobram dados antigos
+      localStorage.removeItem('volare_state');
+      localStorage.clear(); // Limpeza completa por segurança
+
+      showToast('Sistema reinicializado com sucesso! A recarregar...', 'success');
 
       setTimeout(() => {
         window.location.reload();

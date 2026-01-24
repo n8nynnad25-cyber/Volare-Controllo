@@ -166,14 +166,7 @@ const KegSalesForm: React.FC<KegSalesFormProps> = ({ state, onSubmit, onCancel, 
                         <option key={brand.id} value={brand.name}>{brand.name}</option>
                       ))
                     ) : (
-                      // Fallback
-                      <>
-                        <option value="Heineken">Heineken</option>
-                        <option value="Budweiser">Budweiser</option>
-                        <option value="Stella Artois">Stella Artois</option>
-                        <option value="Corona">Corona</option>
-                        <option value="Amstel">Amstel</option>
-                      </>
+                      <option value="" disabled>Nenhuma marca configurada</option>
                     )}
                   </select>
                 </label>

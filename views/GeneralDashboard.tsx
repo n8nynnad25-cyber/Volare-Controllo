@@ -17,7 +17,8 @@ interface GeneralDashboardProps {
 type PeriodType = 'hoje' | 'semana' | 'mes' | 'total';
 
 const GeneralDashboard: React.FC<GeneralDashboardProps> = ({ state, onNavigate }) => {
-  const [period, setPeriod] = useState<PeriodType>('mes');
+  // Alterado padrão para 'total' para garantir que dados importados de outros períodos sejam visíveis
+  const [period, setPeriod] = useState<PeriodType>('total');
 
   // Auxiliar para filtrar por data
   const filterByPeriod = (dateStr: string) => {
@@ -43,9 +44,9 @@ const GeneralDashboard: React.FC<GeneralDashboardProps> = ({ state, onNavigate }
   const filteredMileage = useMemo(() => state.mileageRecords.filter(t => filterByPeriod(t.date)), [state.mileageRecords, period]);
   const filteredKegs = useMemo(() => state.kegSales.filter(t => filterByPeriod(t.date)), [state.kegSales, period]);
 
-  // Cálculos de KPIs
-  const totalEntradas = filteredCash.filter(t => t.type === 'entrada').reduce((acc, t) => acc + t.amount, 0);
-  const totalSaidas = filteredCash.filter(t => t.type === 'saida').reduce((acc, t) => acc + t.amount, 0);
+  // Cálculos de KPIs com verificação case-insensitive
+  const totalEntradas = filteredCash.filter(t => t.type?.toLowerCase() === 'entrada').reduce((acc, t) => acc + t.amount, 0);
+  const totalSaidas = filteredCash.filter(t => t.type?.toLowerCase() === 'saida').reduce((acc, t) => acc + t.amount, 0);
   const currentBalance = totalEntradas - totalSaidas;
 
   const totalKm = filteredMileage.reduce((acc, t) => acc + (t.kmFinal - t.kmInitial), 0);
