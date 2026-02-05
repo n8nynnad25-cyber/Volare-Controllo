@@ -17,34 +17,26 @@ interface GeneralDashboardProps {
 type PeriodType = 'hoje' | 'semana' | 'mes' | 'total';
 
 const GeneralDashboard: React.FC<GeneralDashboardProps> = ({ state, onNavigate }) => {
-  // Alterado padrão para 'total' para garantir que dados importados de outros períodos sejam visíveis
   const [period, setPeriod] = useState<PeriodType>('total');
 
-  // Auxiliar para filtrar por data
   const filterByPeriod = (dateStr: string) => {
     const recordDate = new Date(dateStr);
     const now = new Date();
-
     switch (period) {
-      case 'hoje':
-        return recordDate.toDateString() === now.toDateString();
+      case 'hoje': return recordDate.toDateString() === now.toDateString();
       case 'semana':
         const lastWeek = new Date();
         lastWeek.setDate(now.getDate() - 7);
         return recordDate >= lastWeek;
-      case 'mes':
-        return recordDate.getMonth() === now.getMonth() && recordDate.getFullYear() === now.getFullYear();
-      default:
-        return true;
+      case 'mes': return recordDate.getMonth() === now.getMonth() && recordDate.getFullYear() === now.getFullYear();
+      default: return true;
     }
   };
 
-  // Dados Filtrados
+  // Cash & Mileage
   const filteredCash = useMemo(() => state.cashTransactions.filter(t => filterByPeriod(t.date)), [state.cashTransactions, period]);
   const filteredMileage = useMemo(() => state.mileageRecords.filter(t => filterByPeriod(t.date)), [state.mileageRecords, period]);
-  const filteredKegs = useMemo(() => state.kegSales.filter(t => filterByPeriod(t.date)), [state.kegSales, period]);
 
-  // Cálculos de KPIs com verificação case-insensitive
   const totalEntradas = filteredCash.filter(t => t.type?.toLowerCase() === 'entrada').reduce((acc, t) => acc + t.amount, 0);
   const totalSaidas = filteredCash.filter(t => t.type?.toLowerCase() === 'saida').reduce((acc, t) => acc + t.amount, 0);
   const currentBalance = totalEntradas - totalSaidas;
@@ -52,37 +44,24 @@ const GeneralDashboard: React.FC<GeneralDashboardProps> = ({ state, onNavigate }
   const totalKm = filteredMileage.reduce((acc, t) => acc + (t.kmFinal - t.kmInitial), 0);
   const totalLitersMileage = filteredMileage.reduce((acc, t) => acc + t.liters, 0);
 
-  const totalKegsCount = filteredKegs.reduce((acc, t) => acc + t.quantity, 0);
-  const totalKegsVolume = filteredKegs.reduce((acc, t) => acc + t.volume, 0);
+  // New Keg System Calculations
+  const totalKegsVolume = useMemo(() => state.kegs.filter(k => filterByPeriod(k.purchaseDate)).reduce((acc, k) => acc + k.capacity, 0), [state.kegs, period]);
+  const totalLitersSold = useMemo(() => state.kegMovements.filter(m => m.type === 'Venda' && filterByPeriod(m.date)).reduce((acc, m) => acc + m.liters, 0), [state.kegMovements, period]);
+  const totalLitersLost = useMemo(() => state.kegMovements.filter(m => m.type === 'Perda' && filterByPeriod(m.date)).reduce((acc, m) => acc + m.liters, 0), [state.kegMovements, period]);
+  const activeKegsCount = useMemo(() => state.kegs.filter(k => k.status === 'Ativo').length, [state.kegs]);
 
-  // Gráfico 1: Entradas vs Saídas
-  const cashFlowData = useMemo(() => [
-    { name: 'Entradas', value: totalEntradas, color: '#10b981' },
-    { name: 'Saídas', value: totalSaidas, color: '#ef4444' }
-  ], [totalEntradas, totalSaidas]);
-
-  // Gráfico 2: Venda por Marcas (Rosca)
+  // Gráfico: Mix de Marcas (baseado nos barris em estoque/ativos)
   const kegBrandsData = useMemo(() => {
     const brands: Record<string, number> = {};
-    filteredKegs.forEach(s => {
-      brands[s.brand] = (brands[s.brand] || 0) + s.quantity;
+    state.kegs.forEach(k => {
+      brands[k.brand] = (brands[k.brand] || 0) + 1;
     });
     return Object.entries(brands).map(([name, value]) => ({ name, value }));
-  }, [filteredKegs]);
-
-  // Gráfico 3: Km vs Abastecimento
-  const mileageTrendData = useMemo(() => {
-    return filteredMileage.map(m => ({
-      date: new Date(m.date).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }),
-      km: m.kmFinal - m.kmInitial,
-      litros: m.liters
-    })).slice(-7);
-  }, [filteredMileage]);
+  }, [state.kegs]);
 
   return (
     <div className="flex flex-col gap-8 animate-in fade-in duration-700 pb-20">
 
-      {/* Top Filter Bar */}
       <div className="flex flex-col md:flex-row justify-between items-center gap-4 bg-white p-4 rounded-2xl border border-slate-100 shadow-sm">
         <div className="flex items-center gap-2">
           <span className="material-symbols-outlined text-primary">filter_alt</span>
@@ -101,7 +80,6 @@ const GeneralDashboard: React.FC<GeneralDashboardProps> = ({ state, onNavigate }
         </div>
       </div>
 
-      {/* KPI Section */}
       <section className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         <KPICard
           label="Saldo Fundo de Caixa"
@@ -112,15 +90,15 @@ const GeneralDashboard: React.FC<GeneralDashboardProps> = ({ state, onNavigate }
           onClick={() => onNavigate('cash-fund')}
         />
         <KPICard
-          label="Barris Vendidos"
-          value={`${totalKegsCount} Unid.`}
-          subValue={`${totalKegsVolume} Litros`}
+          label="Consumo de Barris"
+          value={`${totalLitersSold.toFixed(1)} L`}
+          subValue={`${activeKegsCount} Barris Ativos`}
           icon="propane_tank"
           color="amber"
           onClick={() => onNavigate('keg-sales')}
         />
         <KPICard
-          label="Quilometragem"
+          label="Frota & Km"
           value={`${totalKm.toLocaleString()} km`}
           subValue={`${totalLitersMileage.toFixed(1)} L Abastecidos`}
           icon="speed"
@@ -128,84 +106,95 @@ const GeneralDashboard: React.FC<GeneralDashboardProps> = ({ state, onNavigate }
           onClick={() => onNavigate('mileage')}
         />
         <KPICard
-          label="Movimentação"
-          value={formatCurrency(totalEntradas + totalSaidas)}
-          icon="swap_horiz"
-          color="slate"
+          label="Perdas Identificadas"
+          value={`${totalLitersLost.toFixed(1)} L`}
+          icon="report_problem"
+          color="rose"
         />
       </section>
 
-      {/* Quick Actions */}
-      <section>
-        <div className="flex items-center gap-2 mb-4 px-1">
-          <span className="material-symbols-outlined text-primary text-[20px]">bolt</span>
-          <h3 className="font-black text-xs text-slate-500 uppercase tracking-[0.2em]">Ações Operacionais</h3>
-        </div>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <ActionButton label="Entrada Caixa" icon="add_circle" color="emerald" onClick={() => onNavigate('cash-fund-new')} />
-          <ActionButton label="Saída Caixa" icon="remove_circle" color="rose" onClick={() => onNavigate('cash-fund-new')} />
-          <ActionButton label="Registar Km" icon="distance" color="blue" onClick={() => onNavigate('mileage-new')} />
-          <ActionButton label="Venda Barril" icon="shopping_basket" color="amber" onClick={() => onNavigate('keg-sales-new')} />
-        </div>
-      </section>
-
-      {/* Charts Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
         {/* Entradas vs Saídas */}
         <div className="bg-white p-8 rounded-3xl border border-slate-100 shadow-sm h-[400px]">
           <h4 className="text-[10px] font-black text-slate-400 mb-8 uppercase tracking-[0.2em]">Fluxo de Caixa (MT)</h4>
           <ResponsiveContainer width="100%" height="80%">
-            <BarChart data={cashFlowData}>
-              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-              <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 10, fontWeight: 'bold' }} />
-              <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 10 }} />
-              <Tooltip cursor={{ fill: '#f8fafc' }} contentStyle={{ borderRadius: '16px', border: 'none', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)' }} />
-              <Bar dataKey="value" radius={[8, 8, 0, 0]} barSize={60}>
-                {cashFlowData.map((entry, index) => (
-                  <Cell key={`cell-${index}`} fill={entry.color} />
-                ))}
+            <BarChart
+              data={[
+                { name: 'Entradas', value: totalEntradas, colorId: 'entryGradient' },
+                { name: 'Saídas', value: totalSaidas, colorId: 'exitGradient' }
+              ]}
+              margin={{ top: 10, right: 10, left: 0, bottom: 20 }}
+            >
+              <defs>
+                <linearGradient id="entryGradient" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="#10b981" stopOpacity={1} />
+                  <stop offset="100%" stopColor="#065f46" stopOpacity={1} />
+                </linearGradient>
+                <linearGradient id="exitGradient" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="#ef4444" stopOpacity={1} />
+                  <stop offset="100%" stopColor="#991b1b" stopOpacity={1} />
+                </linearGradient>
+                <filter id="barShadow" height="130%">
+                  <feGaussianBlur in="SourceAlpha" stdDeviation="3" />
+                  <feOffset dx="0" dy="4" result="offsetblur" />
+                  <feComponentTransfer><feFuncA type="linear" slope="0.3" /></feComponentTransfer>
+                  <feMerge><feMergeNode /><feMergeNode in="SourceGraphic" /></feMerge>
+                </filter>
+              </defs>
+              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" opacity={0.5} />
+              <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 11, fontWeight: 'bold', fill: '#64748b' }} />
+              <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: '#94a3b8' }} />
+              <Tooltip
+                cursor={{ fill: '#f8fafc', opacity: 0.5 }}
+                contentStyle={{ borderRadius: '16px', border: 'none', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)' }}
+              />
+              <Bar dataKey="value" radius={[8, 8, 0, 0]} barSize={60} style={{ filter: 'url(#barShadow)' }}>
+                {
+                  [totalEntradas, totalSaidas].map((_, index) => (
+                    <Cell key={`cell-${index}`} fill={`url(#${index === 0 ? 'entryGradient' : 'exitGradient'})`} />
+                  ))
+                }
               </Bar>
             </BarChart>
           </ResponsiveContainer>
+
         </div>
 
         {/* Vendas por Marca */}
         <div className="bg-white p-8 rounded-3xl border border-slate-100 shadow-sm h-[400px]">
-          <h4 className="text-[10px] font-black text-slate-400 mb-8 uppercase tracking-[0.2em]">Mix de Marcas (Vendas)</h4>
+          <h4 className="text-[10px] font-black text-slate-400 mb-8 uppercase tracking-[0.2em]">Mix de Marcas (Estoque)</h4>
           <ResponsiveContainer width="100%" height="80%">
             <PieChart>
+              <defs>
+                <filter id="pieShadow" height="130%">
+                  <feGaussianBlur in="SourceAlpha" stdDeviation="3" />
+                  <feOffset dx="0" dy="4" result="offsetblur" />
+                  <feComponentTransfer><feFuncA type="linear" slope="0.3" /></feComponentTransfer>
+                  <feMerge><feMergeNode /><feMergeNode in="SourceGraphic" /></feMerge>
+                </filter>
+              </defs>
               <Pie
                 data={kegBrandsData}
-                innerRadius={60}
+                innerRadius={70}
                 outerRadius={100}
                 paddingAngle={8}
                 dataKey="value"
+                stroke="none"
+                style={{ filter: 'url(#pieShadow)' }}
               >
                 {kegBrandsData.map((entry, index) => (
-                  <Cell key={`cell-${index}`} fill={getBrandColor(entry.name)} />
+                  <Cell
+                    key={`cell-${index}`}
+                    fill={getBrandColor(entry.name)}
+                    className="hover:opacity-80 transition-opacity cursor-pointer"
+                  />
                 ))}
               </Pie>
-              <Tooltip contentStyle={{ borderRadius: '16px', border: 'none', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)' }} />
+              <Tooltip contentStyle={{ borderRadius: '16px', border: 'none', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)' }} />
               <Legend verticalAlign="bottom" height={36} iconType="circle" wrapperStyle={{ fontSize: '10px', fontWeight: 'bold', textTransform: 'uppercase' }} />
             </PieChart>
           </ResponsiveContainer>
-        </div>
 
-        {/* Km vs Litros */}
-        <div className="lg:col-span-2 bg-white p-8 rounded-3xl border border-slate-100 shadow-sm h-[400px]">
-          <h4 className="text-[10px] font-black text-slate-400 mb-8 uppercase tracking-[0.2em]">Eficiência de Frota: Km Percorridos vs Combustível</h4>
-          <ResponsiveContainer width="100%" height="80%">
-            <BarChart data={mileageTrendData}>
-              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-              <XAxis dataKey="date" axisLine={false} tickLine={false} tick={{ fontSize: 10, fontWeight: 'bold' }} />
-              <YAxis yAxisId="left" axisLine={false} tickLine={false} tick={{ fontSize: 10 }} />
-              <YAxis yAxisId="right" orientation="right" axisLine={false} tickLine={false} tick={{ fontSize: 10 }} />
-              <Tooltip contentStyle={{ borderRadius: '16px', border: 'none', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)' }} />
-              <Legend verticalAlign="top" align="right" />
-              <Bar yAxisId="left" dataKey="km" name="KM Percorrido" fill="#8a1e1e" radius={[4, 4, 0, 0]} barSize={40} />
-              <Bar yAxisId="right" dataKey="litros" name="Litros" fill="#0ea5e9" radius={[4, 4, 0, 0]} barSize={40} />
-            </BarChart>
-          </ResponsiveContainer>
         </div>
       </div>
 
@@ -234,9 +223,9 @@ const GeneralDashboard: React.FC<GeneralDashboardProps> = ({ state, onNavigate }
         <ModuleSummary
           title="Operação Barris"
           items={[
-            { label: 'Barris Vendidos', value: totalKegsCount },
-            { label: 'Volume Total', value: `${totalKegsVolume} L` },
-            { label: 'Status Médio', value: 'Confirmado' }
+            { label: 'L Vendidos', value: `${totalLitersSold.toFixed(1)} L` },
+            { label: 'L Perdidos', value: `${totalLitersLost.toFixed(1)} L` },
+            { label: 'Barris Ativos', value: activeKegsCount }
           ]}
           onView={() => onNavigate('keg-sales')}
           icon="inventory_2"
@@ -279,24 +268,6 @@ const KPICard = ({ label, value, subValue, icon, trend, color, onClick }: any) =
       </div>
       <div className="absolute -bottom-4 -right-4 size-24 bg-slate-50 rounded-full opacity-40 group-hover:scale-125 transition-transform duration-700"></div>
     </div>
-  );
-};
-
-const ActionButton = ({ label, icon, color, onClick }: any) => {
-  const colors: any = {
-    emerald: 'bg-emerald-600 hover:bg-emerald-700 shadow-emerald-200',
-    rose: 'bg-rose-600 hover:bg-rose-700 shadow-rose-200',
-    blue: 'bg-blue-600 hover:bg-blue-700 shadow-blue-200',
-    amber: 'bg-amber-600 hover:bg-amber-700 shadow-amber-200'
-  };
-  return (
-    <button
-      onClick={onClick}
-      className={`flex flex-col items-center justify-center gap-3 p-6 rounded-3xl text-white transition-all hover:-translate-y-1 shadow-xl active:scale-95 ${colors[color]}`}
-    >
-      <span className="material-symbols-outlined text-[32px]">{icon}</span>
-      <span className="text-[10px] font-black uppercase tracking-widest">{label}</span>
-    </button>
   );
 };
 

@@ -2,6 +2,8 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { AppState, User } from '../types';
 import { chatWithAI } from '../geminiService';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 
 interface ChatbotProps {
   appState: AppState;
@@ -102,8 +104,15 @@ const Chatbot: React.FC<ChatbotProps> = ({ appState, user }) => {
                 </div>
                 <div className={`flex flex-col gap-1 ${m.role === 'user' ? 'items-end' : ''}`}>
                   <span className="text-[10px] text-slate-400 font-bold uppercase">{m.role === 'bot' ? 'Volare Bot' : 'Você'} • {m.time}</span>
-                  <div className={`p-4 rounded-2xl text-sm leading-relaxed shadow-sm ${m.role === 'bot' ? 'bg-white border border-slate-100 text-slate-700 rounded-tl-none' : 'bg-primary text-white rounded-tr-none'}`}>
-                    <div className="prose prose-sm whitespace-pre-wrap">{m.text}</div>
+                  <div className={`p-4 rounded-3xl text-sm leading-relaxed shadow-sm ring-1 ring-black/5 ${m.role === 'bot' ? 'bg-white text-slate-700 rounded-tl-none' : 'bg-primary text-white rounded-tr-none'}`}>
+                    <div className="prose prose-sm prose-slate max-w-none 
+                      prose-strong:text-slate-900 prose-strong:font-black
+                      prose-p:leading-relaxed prose-li:my-1
+                      dark:prose-invert">
+                      <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                        {m.text}
+                      </ReactMarkdown>
+                    </div>
                   </div>
                 </div>
               </div>

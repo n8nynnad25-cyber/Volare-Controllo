@@ -1,6 +1,6 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
-import { ViewType, AppState, CashTransaction, MileageRecord, KegSale, User, TransactionCategory, Manager, Vehicle, KegBrand, UserRole } from './types';
+import { ViewType, AppState, CashTransaction, MileageRecord, KegSale, User, TransactionCategory, Manager, Vehicle, KegBrand, UserRole, Keg, KegStatus, KegMovement, KegOperationType } from './types';
 import { INITIAL_STATE } from './constants';
 import Sidebar from './components/Sidebar';
 import Header from './components/Header';
@@ -24,6 +24,7 @@ const App: React.FC = () => {
   const [editingTransaction, setEditingTransaction] = useState<CashTransaction | null>(null);
   const [editingMileageRecord, setEditingMileageRecord] = useState<MileageRecord | null>(null);
   const [editingKegSale, setEditingKegSale] = useState<KegSale | null>(null);
+  const [editingKeg, setEditingKeg] = useState<Keg | null>(null);
   const [user, setUser] = useState<User | null>(null);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
@@ -193,7 +194,50 @@ const App: React.FC = () => {
           setState(prev => ({ ...prev, mileageRecords: mappedMileage }));
         }
 
-        // Fetch Keg Sales
+        // Fetch New Kegs System
+        const { data: kegsData, error: kegsError } = await supabase
+          .from('kegs')
+          .select('*')
+          .order('purchase_date', { ascending: false });
+
+        if (kegsError) {
+          console.error('Error fetching kegs:', kegsError);
+        } else if (kegsData) {
+          const mappedKegs: Keg[] = kegsData.map(k => ({
+            id: k.id,
+            brand: k.brand,
+            capacity: k.capacity,
+            currentLiters: k.current_liters,
+            purchasePrice: k.purchase_price,
+            purchaseDate: k.purchase_date,
+            activationDate: k.activation_date,
+            status: k.status as KegStatus,
+            code: k.code
+          }));
+          setState(prev => ({ ...prev, kegs: mappedKegs }));
+        }
+
+        const { data: movementsData, error: movementsError } = await supabase
+          .from('keg_movements')
+          .select('*')
+          .order('date', { ascending: false });
+
+        if (movementsError) {
+          console.error('Error fetching keg movements:', movementsError);
+        } else if (movementsData) {
+          const mappedMovements: KegMovement[] = movementsData.map(m => ({
+            id: m.id,
+            kegId: m.keg_id,
+            type: m.type as 'Venda' | 'Perda' | 'Transferência',
+            liters: m.liters,
+            date: m.date,
+            description: m.description
+          }));
+          setState(prev => ({ ...prev, kegMovements: mappedMovements }));
+
+        }
+
+        // Fetch Legacy Keg Sales (keeping for compatibility/other modules if needed)
         const { data: kegData, error: kegError } = await supabase
           .from('keg_sales')
           .select('*')
@@ -202,7 +246,7 @@ const App: React.FC = () => {
         if (kegError) {
           console.error('Error fetching keg sales:', kegError);
         } else if (kegData) {
-          const mappedKegs: KegSale[] = kegData.map(sale => ({
+          const mappedLegacy: KegSale[] = kegData.map(sale => ({
             id: sale.id,
             date: sale.date,
             brand: sale.brand,
@@ -210,9 +254,10 @@ const App: React.FC = () => {
             quantity: sale.quantity,
             code: sale.code,
             value: sale.value,
-            status: sale.status as 'Confirmado' | 'Pendente'
+            status: sale.status as 'Confirmado' | 'Pendente',
+            operationType: sale.operation_type as 'purchase' | 'sale'
           }));
-          setState(prev => ({ ...prev, kegSales: mappedKegs }));
+          setState(prev => ({ ...prev, kegSales: mappedLegacy }));
         }
 
         // Fetch Categories
@@ -475,6 +520,7 @@ const App: React.FC = () => {
       code: s.code,
       value: s.value,
       status: s.status,
+      operation_type: s.operationType,
       user_id: user?.id
     }));
 
@@ -500,7 +546,8 @@ const App: React.FC = () => {
         quantity: item.quantity,
         code: item.code,
         value: item.value,
-        status: item.status as 'Confirmado' | 'Pendente'
+        status: item.status as 'Confirmado' | 'Pendente',
+        operationType: item.operation_type as 'purchase' | 'sale'
       }));
 
       setState(prev => ({ ...prev, kegSales: [...savedSales, ...prev.kegSales] }));
@@ -518,6 +565,7 @@ const App: React.FC = () => {
     if (updatedSale.code) dbUpdate.code = updatedSale.code;
     if (updatedSale.value !== undefined) dbUpdate.value = updatedSale.value;
     if (updatedSale.status) dbUpdate.status = updatedSale.status;
+    if (updatedSale.operationType) dbUpdate.operation_type = updatedSale.operationType;
 
     const { error } = await supabase
       .from('keg_sales')
@@ -562,6 +610,193 @@ const App: React.FC = () => {
       kegSales: prev.kegSales.filter(sale => sale.id !== id)
     }));
   };
+
+  // --- NEW KEG SYSTEM FUNCTIONS ---
+
+  const addKeg = async (keg: Keg | Keg[]) => {
+    const newKegs = Array.isArray(keg) ? keg : [keg];
+    const dbKegs = newKegs.map(k => ({
+      brand: k.brand,
+      capacity: k.capacity,
+      current_liters: k.currentLiters,
+      purchase_price: k.purchasePrice,
+      purchase_date: k.purchaseDate,
+      status: k.status,
+      code: k.code,
+      user_id: user?.id
+    }));
+
+    const { data, error } = await supabase.from('kegs').insert(dbKegs).select();
+
+    if (error) {
+      showToast("Erro ao registar barril.", "error");
+      return;
+    }
+
+    if (data) {
+      const saved: Keg[] = data.map(k => ({
+        id: k.id,
+        brand: k.brand,
+        capacity: k.capacity,
+        currentLiters: k.current_liters,
+        purchasePrice: k.purchase_price,
+        purchaseDate: k.purchase_date,
+        status: k.status as KegStatus,
+        code: k.code
+      }));
+      setState(prev => ({ ...prev, kegs: [...saved, ...prev.kegs] }));
+      showToast(`${saved.length} barril(s) registado(s).`, "success");
+    }
+  };
+
+  const updateKeg = async (id: string, updates: Partial<Keg>) => {
+    const dbUpdate: any = {};
+    if (updates.status) dbUpdate.status = updates.status;
+    if (updates.currentLiters !== undefined) dbUpdate.current_liters = updates.currentLiters;
+    if (updates.activationDate) dbUpdate.activation_date = updates.activationDate;
+
+    const { error } = await supabase.from('kegs').update(dbUpdate).eq('id', id);
+
+    if (error) {
+      showToast("Erro ao atualizar barril.", "error");
+      return;
+    }
+
+    setState(prev => ({
+      ...prev,
+      kegs: prev.kegs.map(k => k.id === id ? { ...k, ...updates } : k)
+    }));
+  };
+  const deleteKeg = async (id: string) => {
+    const { error } = await supabase.from('kegs').delete().eq('id', id);
+
+    if (error) {
+      showToast("Erro ao remover barril.", "error");
+      return;
+    }
+
+    showToast("Barril removido com sucesso.", "success");
+    setState(prev => ({
+      ...prev,
+      kegs: prev.kegs.filter(k => k.id !== id)
+    }));
+  };
+
+  const transferKeg = async (kegId: string, liters: number, destination: string) => {
+    // 1. Update Keg
+    await updateKeg(kegId, {
+      status: 'Transferido',
+      currentLiters: 0
+    });
+
+    // 2. Record Transfer Movement
+    await addKegMovement({
+      id: '', // DB Generated
+      kegId: kegId,
+      type: 'Transferência',
+      liters: liters,
+      date: new Date().toISOString(),
+      description: `Transferido/Emprestado para: ${destination}`
+    });
+
+    showToast(`Transferência de ${liters}L concluída.`, "success");
+  };
+
+
+  const addKegMovement = async (movement: KegMovement) => {
+    const { data, error } = await supabase.from('keg_movements').insert([{
+      keg_id: movement.kegId,
+      type: movement.type,
+      liters: movement.liters,
+      date: movement.date,
+      description: movement.description,
+      user_id: user?.id
+    }]).select();
+
+    if (error) return;
+
+    if (data) {
+      const saved: KegMovement = {
+        id: data[0].id,
+        kegId: data[0].keg_id,
+        type: data[0].type,
+        liters: data[0].liters,
+        date: data[0].date,
+        description: data[0].description
+      };
+      setState(prev => ({ ...prev, kegMovements: [saved, ...prev.kegMovements] }));
+    }
+  };
+
+  /**
+   * FIFO Engine for Sales Distribution
+   * Proccesses external sales volume and drains active kegs.
+   */
+  const processExternalSales = async (brand: string, totalLiters: number, date: string) => {
+    // 1. Get active kegs for the brand, sorted by activation_date
+    let remaining = totalLiters;
+    const activeKegs = state.kegs
+      .filter(k => k.brand === brand && k.status === 'Ativo' && k.currentLiters > 0)
+      .sort((a, b) => new Date(a.activationDate || 0).getTime() - new Date(b.activationDate || 0).getTime());
+
+    if (activeKegs.length === 0) {
+      showToast(`Nenhum barril ativo de ${brand} para consumir!`, "error");
+      return;
+    }
+
+    for (const keg of activeKegs) {
+      if (remaining <= 0) break;
+
+      const consumption = Math.min(keg.currentLiters, remaining);
+      const newLiters = keg.currentLiters - consumption;
+      const newStatus: KegStatus = newLiters <= 0 ? 'Esgotado' : 'Ativo';
+
+      // Update Keg
+      await updateKeg(keg.id, {
+        currentLiters: newLiters,
+        status: newStatus
+      });
+
+      // Record Movement
+      await addKegMovement({
+        id: '', // Generated by DB
+        kegId: keg.id,
+        type: 'Venda',
+        liters: consumption,
+        date: date,
+        description: `Consumo FIFO de venda externa (${brand})`
+      });
+
+      remaining -= consumption;
+    }
+
+    if (remaining > 0) {
+      showToast(`Atenção: Sobraram ${remaining}L sem barril associado!`, "info");
+    } else {
+      showToast(`Venda de ${totalLiters}L processada com sucesso via FIFO.`, "success");
+    }
+  };
+
+  const registerKegLoss = async (kegId: string, liters: number, description: string = 'Barril estragado') => {
+    // 1. Update Keg
+    await updateKeg(kegId, {
+      status: 'Estragado',
+      currentLiters: 0
+    });
+
+    // 2. Record Loss Movement
+    await addKegMovement({
+      id: '', // DB Generated
+      kegId: kegId,
+      type: 'Perda',
+      liters: liters,
+      date: new Date().toISOString(),
+      description: description
+    });
+
+    showToast(`Perda de ${liters}L registada com sucesso.`, "success");
+  };
+
 
 
   const addCategory = async (name: string) => {
@@ -1128,11 +1363,29 @@ const App: React.FC = () => {
               setView('keg-sales-edit');
             } : undefined}
             onDelete={canDelete(user.role) ? deleteKegSale : undefined}
+            onUpdateKeg={updateKeg}
+            onRegisterLoss={registerKegLoss}
+            onDeleteKeg={canDelete(user.role) ? deleteKeg : undefined}
+            onTransferKeg={canEdit(user.role) ? transferKeg : undefined}
+            onEditKeg={canEdit(user.role) ? (keg) => {
+              setEditingKeg(keg);
+              setView('keg-edit');
+            } : undefined}
             onConfirmRequest={showConfirm}
           />
         );
       case 'keg-sales-new':
-        return <KegSalesForm state={state} onSubmit={addKegSale} onCancel={() => setView('keg-sales')} onNotify={showToast} onConfirmRequest={showConfirm} />;
+        return (
+          <KegSalesForm
+            state={state}
+            onSubmit={addKegSale}
+            onAddKeg={addKeg}
+            onProcessSales={processExternalSales}
+            onCancel={() => setView('keg-sales')}
+            onNotify={showToast}
+            onConfirmRequest={showConfirm}
+          />
+        );
       case 'keg-sales-edit':
         return (
           <KegSalesForm
@@ -1143,6 +1396,8 @@ const App: React.FC = () => {
                 updateKegSale(editingKegSale.id, sale);
               }
             }}
+            onAddKeg={addKeg}
+            onProcessSales={processExternalSales}
             onCancel={() => {
               setEditingKegSale(null);
               setView('keg-sales');
@@ -1151,6 +1406,29 @@ const App: React.FC = () => {
             onConfirmRequest={showConfirm}
           />
         );
+      case 'keg-edit':
+        return (
+          <KegSalesForm
+            state={state}
+            initialKegData={editingKeg || undefined}
+            onSubmit={() => { }} // Not used for direct keg edit in this flow
+            onUpdateKeg={async (id, updates) => {
+              await updateKeg(id, updates);
+              setEditingKeg(null);
+              setView('keg-sales');
+            }}
+            onAddKeg={addKeg}
+            onProcessSales={processExternalSales}
+            onCancel={() => {
+              setEditingKeg(null);
+              setView('keg-sales');
+            }}
+            onNotify={showToast}
+            onConfirmRequest={showConfirm}
+          />
+        );
+
+
       case 'settings':
         if (!canConfigure(user.role)) {
           return (

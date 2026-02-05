@@ -1,5 +1,5 @@
 
-export type ViewType = 'dashboard' | 'cash-fund' | 'cash-fund-new' | 'cash-fund-edit' | 'mileage' | 'mileage-new' | 'mileage-edit' | 'keg-sales' | 'keg-sales-new' | 'keg-sales-edit' | 'settings';
+export type ViewType = 'dashboard' | 'cash-fund' | 'cash-fund-new' | 'cash-fund-edit' | 'mileage' | 'mileage-new' | 'mileage-edit' | 'keg-sales' | 'keg-sales-new' | 'keg-sales-edit' | 'keg-edit' | 'settings';
 
 export type UserRole = 'admin' | 'manager' | 'boss';
 
@@ -32,6 +32,30 @@ export interface MileageRecord {
   cost: number;
 }
 
+export type KegStatus = 'Novo' | 'Ativo' | 'Esgotado' | 'Estragado' | 'Transferido';
+export type KegOperationType = 'purchase' | 'sale' | 'loss';
+
+export interface Keg {
+  id: string;
+  brand: string;
+  capacity: number;
+  currentLiters: number;
+  purchasePrice: number;
+  purchaseDate: string;
+  activationDate?: string;
+  status: KegStatus;
+  code: string;
+}
+
+export interface KegMovement {
+  id: string;
+  kegId: string;
+  type: 'Venda' | 'Perda' | 'Transferência';
+  liters: number;
+  date: string;
+  description?: string;
+}
+
 export interface KegSale {
   id: string;
   date: string;
@@ -41,7 +65,9 @@ export interface KegSale {
   code: string;
   value: number;
   status: 'Confirmado' | 'Pendente';
+  operationType: 'purchase' | 'sale';
 }
+
 
 export interface TransactionCategory {
   id: string;
@@ -83,6 +109,8 @@ export interface AppState {
   cashTransactions: CashTransaction[];
   mileageRecords: MileageRecord[];
   kegSales: KegSale[];
+  kegs: Keg[];
+  kegMovements: KegMovement[];
   categories: TransactionCategory[];
   managers: Manager[];
   vehicles: Vehicle[];
@@ -90,3 +118,4 @@ export interface AppState {
   toasts: ToastMessage[];
   confirmationModal: ConfirmationModalState;
 }
+
