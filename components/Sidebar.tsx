@@ -18,6 +18,7 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, onViewChange, user, onLo
     { id: 'cash-fund', label: 'Fundo de Caixa', icon: 'account_balance_wallet' },
     { id: 'mileage', label: 'Quilometragem', icon: 'speed' },
     { id: 'keg-sales', label: 'Venda de Barris', icon: 'propane_tank' },
+    { id: 'notifications', label: 'Notificações', icon: 'notifications' },
   ];
 
   const handleItemClick = (id: string) => {

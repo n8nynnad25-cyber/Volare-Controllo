@@ -1,5 +1,5 @@
 
-export type ViewType = 'login' | 'dashboard' | 'cash-fund' | 'cash-fund-new' | 'cash-fund-edit' | 'mileage' | 'mileage-new' | 'mileage-edit' | 'keg-sales' | 'keg-sales-new' | 'keg-sales-edit' | 'keg-edit' | 'settings';
+export type ViewType = 'login' | 'dashboard' | 'cash-fund' | 'cash-fund-new' | 'cash-fund-edit' | 'mileage' | 'mileage-new' | 'mileage-edit' | 'keg-sales' | 'keg-sales-new' | 'keg-sales-edit' | 'keg-edit' | 'settings' | 'notifications';
 
 export type UserRole = 'admin' | 'manager' | 'boss';
 
@@ -9,6 +9,22 @@ export interface User {
   email: string;
   role: UserRole; // Agora tipado estritamente
   avatar: string;
+}
+
+export type NotificationModule = 'Fundo de Caixa' | 'Quilometragem' | 'Venda de Barris';
+export type NotificationEvent = 'Criado' | 'Actualizado' | 'Eliminado';
+
+export interface SystemNotification {
+  id: string;
+  module: NotificationModule;
+  eventType: NotificationEvent;
+  entity: string; // Gerente, Viatura, Barril, etc.
+  referenceId: string;
+  summary: string;
+  userName: string; // Utilizador que realizou a acção
+  createdAt: string;
+  isRead: boolean;
+  relatedManager?: string; // Para filtragem de Gerentes
 }
 
 export interface CashTransaction {
@@ -116,6 +132,7 @@ export interface AppState {
   vehicles: Vehicle[];
   kegBrands: KegBrand[];
   toasts: ToastMessage[];
+  notifications: SystemNotification[];
   confirmationModal: ConfirmationModalState;
 }
 

@@ -5,9 +5,11 @@ import { ViewType } from '../types';
 interface HeaderProps {
   view: ViewType;
   onMenuClick: () => void;
+  onNotificationsClick?: () => void;
+  unreadCount?: number;
 }
 
-const Header: React.FC<HeaderProps> = ({ view, onMenuClick }) => {
+const Header: React.FC<HeaderProps> = ({ view, onMenuClick, onNotificationsClick, unreadCount = 0 }) => {
   const getTitle = () => {
     switch (view) {
       case 'dashboard': return 'Análise';
@@ -17,6 +19,7 @@ const Header: React.FC<HeaderProps> = ({ view, onMenuClick }) => {
       case 'mileage-new': return 'Registo de Quilometragem';
       case 'keg-sales': return 'Controlo de Venda de Barris';
       case 'keg-sales-new': return 'Registo Venda de Barris';
+      case 'notifications': return 'Notificações do Sistema';
       default: return 'Volare';
     }
   };
@@ -27,6 +30,7 @@ const Header: React.FC<HeaderProps> = ({ view, onMenuClick }) => {
       case 'cash-fund': return 'Visão geral das movimentações financeiras.';
       case 'mileage': return 'Visão geral de eficiência, custos e consumo da frota.';
       case 'keg-sales': return 'Visão geral operacional e financeira de barris.';
+      case 'notifications': return 'Histórico de eventos e alertas importantes.';
       default: return 'Gestão e Operação';
     }
   };
@@ -50,9 +54,16 @@ const Header: React.FC<HeaderProps> = ({ view, onMenuClick }) => {
           <span className="material-symbols-outlined text-[20px]">calendar_today</span>
           <span className="capitalize">{new Date().toLocaleDateString('pt-pt', { day: 'numeric', month: 'long', year: 'numeric' })}</span>
         </button>
-        <button className="relative rounded-full bg-slate-100 p-2.5 text-slate-600 hover:bg-slate-200 transition-colors">
+        <button
+          onClick={onNotificationsClick}
+          className="relative rounded-full bg-slate-100 p-2.5 text-slate-600 hover:bg-slate-200 transition-colors"
+        >
           <span className="material-symbols-outlined">notifications</span>
-          <span className="absolute top-2 right-2 h-2.5 w-2.5 rounded-full bg-primary border-2 border-white"></span>
+          {unreadCount > 0 && (
+            <span className="absolute -top-1 -right-1 flex h-5 w-5 items-center justify-center rounded-full bg-primary text-[10px] font-bold text-white border-2 border-white animate-pulse">
+              {unreadCount > 99 ? '99+' : unreadCount}
+            </span>
+          )}
         </button>
       </div>
     </header>

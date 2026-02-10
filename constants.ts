@@ -20,6 +20,7 @@ export const INITIAL_STATE: AppState = {
   vehicles: [],
   kegBrands: [],
   toasts: [],
+  notifications: [],
   confirmationModal: {
     isOpen: false,
     message: '',

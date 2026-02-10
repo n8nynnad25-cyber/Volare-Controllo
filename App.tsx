@@ -1,6 +1,6 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
-import { ViewType, AppState, CashTransaction, MileageRecord, KegSale, User, TransactionCategory, Manager, Vehicle, KegBrand, UserRole, Keg, KegStatus, KegMovement, KegOperationType } from './types';
+import { ViewType, AppState, CashTransaction, MileageRecord, KegSale, User, TransactionCategory, Manager, Vehicle, KegBrand, UserRole, Keg, KegStatus, KegMovement, KegOperationType, NotificationModule, NotificationEvent, SystemNotification } from './types';
 import { INITIAL_STATE } from './constants';
 import Sidebar from './components/Sidebar';
 import Header from './components/Header';
@@ -11,6 +11,7 @@ import MileageDashboard from './views/MileageDashboard';
 import MileageForm from './views/MileageForm';
 import KegSalesDashboard from './views/KegSalesDashboard';
 import KegSalesForm from './views/KegSalesForm';
+import NotificationsView from './views/NotificationsView';
 import SettingsView from './views/SettingsView';
 import LoginView from './views/LoginView';
 import Chatbot from './components/Chatbot';
@@ -146,12 +147,154 @@ const App: React.FC = () => {
     });
   };
 
+  // --- NOTIFICATION SYSTEM FUNCTIONS ---
+
+  const addNotification = async (data: {
+    module: NotificationModule,
+    eventType: NotificationEvent,
+    entity: string,
+    referenceId: string,
+    summary: string,
+    relatedManager?: string
+  }) => {
+    if (!user) return;
+
+    const newNotif: Omit<SystemNotification, 'id'> = {
+      module: data.module,
+      eventType: data.eventType,
+      entity: data.entity,
+      referenceId: data.referenceId,
+      summary: data.summary,
+      userName: user.name,
+      createdAt: new Date().toISOString(),
+      isRead: false,
+      relatedManager: data.relatedManager
+    };
+
+    // 1. Persist to DB
+    const { data: savedData, error } = await supabase
+      .from('notifications')
+      .insert([{
+        module: newNotif.module,
+        event_type: newNotif.eventType,
+        entity: newNotif.entity,
+        reference_id: newNotif.referenceId,
+        summary: newNotif.summary,
+        action_user_name: newNotif.userName,
+        related_manager: newNotif.relatedManager,
+        is_read: false
+      }])
+      .select();
+
+    if (error) {
+      console.warn("DB Notifications not available, using local only.", error);
+    }
+
+    // 2. Update local state (even if DB fails, for immediate feedback if table exists but not confirmed)
+    const finalNotif: SystemNotification = {
+      ...newNotif,
+      id: savedData?.[0]?.id || Math.random().toString(36).substring(2, 9)
+    };
+
+    setState(prev => ({
+      ...prev,
+      notifications: [finalNotif, ...prev.notifications].slice(0, 500)
+    }));
+  };
+
+  const markNotificationAsRead = async (id: string) => {
+    await supabase.from('notifications').update({ is_read: true }).eq('id', id);
+    setState(prev => ({
+      ...prev,
+      notifications: prev.notifications.map(n => n.id === id ? { ...n, isRead: true } : n)
+    }));
+  };
+
+  const markAllNotificationsAsRead = async () => {
+    if (!user) return;
+    await supabase.from('notifications').update({ is_read: true }).eq('is_read', false);
+    setState(prev => ({
+      ...prev,
+      notifications: prev.notifications.map(n => ({ ...n, isRead: true }))
+    }));
+  };
+
+  const getFilteredNotifications = (allNotifications: SystemNotification[]) => {
+    if (!user) return [];
+
+    return allNotifications.filter(notif => {
+      // 1. O cargo do utilizador
+      const role = user.role;
+
+      // 2. Se o módulo da notificação é permitido para esse cargo
+      // Boss não vê notificações técnicas ou de eliminação (regra oficial)
+      if (role === 'boss' && notif.eventType === 'Eliminado') return false;
+
+      // 3. Se o registo está relacionado com o utilizador (para Gerentes)
+      if (role === 'manager') {
+        const isOwnAction = notif.userName === user.name;
+        const isRelatedToMe = notif.relatedManager === user.name;
+
+        // Gerente vê se: 
+        // - Foi uma ação dele (Criou/Actualizou)
+        // - É sobre ele (relatedManager)
+        // - Um Admin eliminou algo relacionado a ele (handled by isRelatedToMe)
+        if (!isOwnAction && !isRelatedToMe) return false;
+      }
+
+      // 4. Se o tipo de evento é visível para esse cargo
+      // Boss não visualiza notificações de eliminação (já tratado acima)
+
+      // Administrador vê tudo
+      if (role === 'admin') return true;
+
+      return true;
+    }).map(notif => {
+      // Regra de Privacidade do BOSS: Não visualiza valores sensíveis individuais
+      if (user?.role === 'boss') {
+        const sanitizedSummary = notif.summary
+          .replace(/valor de [\d.,]+\s*MTn/gi, 'valor processado')
+          .replace(/no valor de [\d.,]+\s*MTn/gi, 'conforme registado');
+        return { ...notif, summary: sanitizedSummary };
+      }
+      return notif;
+    });
+  };
+
+  const filteredNotifications = useMemo(() => getFilteredNotifications(state.notifications), [state.notifications, user]);
+  const unreadCount = useMemo(() => filteredNotifications.filter(n => !n.isRead).length, [filteredNotifications]);
+
+  // --- DATA FETCHING ---
+
   // Fetch Initial Data
   useEffect(() => {
     if (!user) return;
 
     const fetchData = async () => {
       try {
+        // Fetch Notifications First
+        const { data: notifData, error: notifError } = await supabase
+          .from('notifications')
+          .select('*')
+          .order('created_at', { ascending: false })
+          .limit(100);
+
+        if (!notifError && notifData) {
+          const mappedNotifications: SystemNotification[] = notifData.map(n => ({
+            id: n.id,
+            module: n.module as NotificationModule,
+            eventType: n.event_type as NotificationEvent,
+            entity: n.entity,
+            referenceId: n.reference_id,
+            summary: n.summary,
+            userName: n.action_user_name,
+            createdAt: n.created_at,
+            isRead: n.is_read,
+            relatedManager: n.related_manager
+          }));
+          setState(prev => ({ ...prev, notifications: mappedNotifications }));
+        }
+
         const { data: cashData, error: cashError } = await supabase
           .from('cash_transactions')
           .select('*')
@@ -357,6 +500,19 @@ const App: React.FC = () => {
       }));
 
       setState(prev => ({ ...prev, cashTransactions: [...savedTransactions, ...prev.cashTransactions] }));
+
+      // Notificação
+      savedTransactions.forEach(stx => {
+        addNotification({
+          module: 'Fundo de Caixa',
+          eventType: 'Criado',
+          entity: 'Transação',
+          referenceId: stx.id,
+          summary: `✅ Novo registo de ${stx.type} (${stx.category}) no valor de ${stx.amount} MTn`,
+          relatedManager: stx.manager
+        });
+      });
+
       setView('cash-fund');
     }
   };
@@ -392,6 +548,19 @@ const App: React.FC = () => {
       )
     }));
 
+    // Notificação
+    const original = state.cashTransactions.find(t => t.id === id);
+    if (original) {
+      addNotification({
+        module: 'Fundo de Caixa',
+        eventType: 'Actualizado',
+        entity: 'Transação',
+        referenceId: id,
+        summary: `✏️ Informação de caixa actualizada (${updatedTx.description || original.description})`,
+        relatedManager: updatedTx.manager || original.manager
+      });
+    }
+
     setEditingTransaction(null);
     setView('cash-fund');
   };
@@ -410,10 +579,24 @@ const App: React.FC = () => {
 
     showToast("Transação removida.", "success");
 
+    const original = state.cashTransactions.find(t => t.id === id);
+
     setState(prev => ({
       ...prev,
       cashTransactions: prev.cashTransactions.filter(tx => tx.id !== id)
     }));
+
+    // Notificação
+    if (original) {
+      addNotification({
+        module: 'Fundo de Caixa',
+        eventType: 'Eliminado',
+        entity: 'Transação',
+        referenceId: id,
+        summary: `🔴 Registo de caixa eliminado: ${original.description}`,
+        relatedManager: original.manager
+      });
+    }
   };
 
   const addMileageRecord = async (record: MileageRecord | MileageRecord[]) => {
@@ -454,6 +637,18 @@ const App: React.FC = () => {
       }));
 
       setState(prev => ({ ...prev, mileageRecords: [...savedRecords, ...prev.mileageRecords] }));
+
+      // Notificação
+      savedRecords.forEach(srec => {
+        addNotification({
+          module: 'Quilometragem',
+          eventType: 'Criado',
+          entity: 'Viatura',
+          referenceId: srec.id,
+          summary: `✅ Novo registo de quilometragem para ${srec.vehicle} (${srec.kmFinal - srec.kmInitial} km)`
+        });
+      });
+
       setView('mileage');
     }
   };
@@ -488,6 +683,18 @@ const App: React.FC = () => {
       )
     }));
 
+    // Notificação
+    const original = state.mileageRecords.find(r => r.id === id);
+    if (original) {
+      addNotification({
+        module: 'Quilometragem',
+        eventType: 'Actualizado',
+        entity: 'Viatura',
+        referenceId: id,
+        summary: `✏️ Quilometragem de ${updatedRecord.vehicle || original.vehicle} actualizada`
+      });
+    }
+
     setEditingMileageRecord(null);
     setView('mileage');
   };
@@ -504,10 +711,23 @@ const App: React.FC = () => {
       return;
     }
 
+    const original = state.mileageRecords.find(r => r.id === id);
+
     setState(prev => ({
       ...prev,
       mileageRecords: prev.mileageRecords.filter(rec => rec.id !== id)
     }));
+
+    // Notificação
+    if (original) {
+      addNotification({
+        module: 'Quilometragem',
+        eventType: 'Eliminado',
+        entity: 'Viatura',
+        referenceId: id,
+        summary: `🔴 Registo de quilometragem eliminado: ${original.vehicle} (${original.date})`
+      });
+    }
   };
 
   const addKegSale = async (sale: KegSale | KegSale[]) => {
@@ -552,6 +772,18 @@ const App: React.FC = () => {
       }));
 
       setState(prev => ({ ...prev, kegSales: [...savedSales, ...prev.kegSales] }));
+
+      // Notificação
+      savedSales.forEach(s => {
+        addNotification({
+          module: 'Venda de Barris',
+          eventType: 'Criado',
+          entity: 'Venda',
+          referenceId: s.id,
+          summary: `✅ Nova ${s.operationType === 'purchase' ? 'compra' : 'venda'} de ${s.brand} (${s.volume}L) no valor de ${s.value} MTn`
+        });
+      });
+
       setView('keg-sales');
     }
   };
@@ -588,6 +820,18 @@ const App: React.FC = () => {
       )
     }));
 
+    // Notificação
+    const original = state.kegSales.find(s => s.id === id);
+    if (original) {
+      addNotification({
+        module: 'Venda de Barris',
+        eventType: 'Actualizado',
+        entity: 'Venda',
+        referenceId: id,
+        summary: `✏️ Registo de venda de ${updatedSale.brand || original.brand} actualizado`
+      });
+    }
+
     setEditingKegSale(null);
     setView('keg-sales');
   };
@@ -606,10 +850,23 @@ const App: React.FC = () => {
 
     showToast("Venda removida com sucesso.", "success");
 
+    const original = state.kegSales.find(s => s.id === id);
+
     setState(prev => ({
       ...prev,
       kegSales: prev.kegSales.filter(sale => sale.id !== id)
     }));
+
+    // Notificação
+    if (original) {
+      addNotification({
+        module: 'Venda de Barris',
+        eventType: 'Eliminado',
+        entity: 'Venda',
+        referenceId: id,
+        summary: `🔴 Venda de ${original.brand} (${original.volume}L) eliminada`
+      });
+    }
   };
 
   // --- NEW KEG SYSTEM FUNCTIONS ---
@@ -646,6 +903,18 @@ const App: React.FC = () => {
         code: k.code
       }));
       setState(prev => ({ ...prev, kegs: [...saved, ...prev.kegs] }));
+
+      // Notificação
+      saved.forEach(k => {
+        addNotification({
+          module: 'Venda de Barris',
+          eventType: 'Criado',
+          entity: 'Barril',
+          referenceId: k.id,
+          summary: `✅ Novo barril registado: ${k.brand} (${k.capacity}L) - Código: ${k.code}`
+        });
+      });
+
       showToast(`${saved.length} barril(s) registado(s).`, "success");
     }
   };
@@ -667,6 +936,18 @@ const App: React.FC = () => {
       ...prev,
       kegs: prev.kegs.map(k => k.id === id ? { ...k, ...updates } : k)
     }));
+
+    // Notificação
+    const original = state.kegs.find(k => k.id === id);
+    if (original && updates.status && updates.status !== original.status) {
+      addNotification({
+        module: 'Venda de Barris',
+        eventType: 'Actualizado',
+        entity: 'Barril',
+        referenceId: id,
+        summary: `✏️ Status do barril ${original.code} alterado para ${updates.status}`
+      });
+    }
   };
   const deleteKeg = async (id: string) => {
     const { error } = await supabase.from('kegs').delete().eq('id', id);
@@ -676,11 +957,24 @@ const App: React.FC = () => {
       return;
     }
 
+    const original = state.kegs.find(k => k.id === id);
+
     showToast("Barril removido com sucesso.", "success");
     setState(prev => ({
       ...prev,
       kegs: prev.kegs.filter(k => k.id !== id)
     }));
+
+    // Notificação
+    if (original) {
+      addNotification({
+        module: 'Venda de Barris',
+        eventType: 'Eliminado',
+        entity: 'Barril',
+        referenceId: id,
+        summary: `🔴 Barril removido do inventário: ${original.brand} (${original.code})`
+      });
+    }
   };
 
   const transferKeg = async (kegId: string, liters: number, destination: string) => {
@@ -698,6 +992,14 @@ const App: React.FC = () => {
       liters: liters,
       date: new Date().toISOString(),
       description: `Transferido/Emprestado para: ${destination}`
+    });
+
+    addNotification({
+      module: 'Venda de Barris',
+      eventType: 'Actualizado',
+      entity: 'Barril',
+      referenceId: kegId,
+      summary: `📤 Barril transferido para ${destination} (${liters}L)`
     });
 
     showToast(`Transferência de ${liters}L concluída.`, "success");
@@ -793,6 +1095,14 @@ const App: React.FC = () => {
       liters: liters,
       date: new Date().toISOString(),
       description: description
+    });
+
+    addNotification({
+      module: 'Venda de Barris',
+      eventType: 'Actualizado',
+      entity: 'Barril',
+      referenceId: kegId,
+      summary: `⚠️ Registo de PERDA no barril (${liters}L): ${description}`
     });
 
     showToast(`Perda de ${liters}L registada com sucesso.`, "success");
@@ -1481,6 +1791,15 @@ const App: React.FC = () => {
             onCreateSystemUser={handleAddSystemUser}
           />
         );
+      case 'notifications':
+        return (
+          <NotificationsView
+            notifications={filteredNotifications}
+            onMarkAsRead={markNotificationAsRead}
+            onMarkAllAsRead={markAllNotificationsAsRead}
+            userRole={user.role}
+          />
+        );
       default:
         return <GeneralDashboard state={state} onNavigate={setView} />;
     }
@@ -1497,7 +1816,12 @@ const App: React.FC = () => {
         onClose={() => setIsSidebarOpen(false)}
       />
       <div className="flex flex-1 flex-col overflow-hidden bg-background-light relative">
-        <Header view={view} onMenuClick={() => setIsSidebarOpen(true)} />
+        <Header
+          view={view}
+          onMenuClick={() => setIsSidebarOpen(true)}
+          unreadCount={unreadCount}
+          onNotificationsClick={() => setView('notifications')}
+        />
         <main className="flex-1 overflow-y-auto p-4 md:p-8 custom-scrollbar">
           <div className="max-w-[1600px] mx-auto w-full">
             {renderView()}
