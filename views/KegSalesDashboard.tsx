@@ -1,6 +1,6 @@
 
 import React, { useState, useMemo } from 'react';
-import { AppState, Keg, KegMovement, KegStatus } from '../types';
+import { AppState, Keg, KegMovement, KegStatus, KegSale } from '../types';
 import { BRAND_COLORS } from '../constants';
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
@@ -12,6 +12,8 @@ import { getBrandColor } from '../src/utils/colors';
 interface KegSalesDashboardProps {
   state: AppState;
   onAdd?: () => void;
+  onEdit?: (sale: KegSale) => void;
+  onDelete?: (id: string) => void;
   onUpdateKeg?: (id: string, updates: Partial<Keg>) => void;
   onRegisterLoss?: (kegId: string, liters: number, description: string) => void;
   onDeleteKeg?: (id: string) => void;
@@ -21,7 +23,7 @@ interface KegSalesDashboardProps {
 }
 
 const KegSalesDashboard: React.FC<KegSalesDashboardProps> = ({
-  state, onAdd, onUpdateKeg, onRegisterLoss, onDeleteKeg, onTransferKeg, onEditKeg, onConfirmRequest
+  state, onAdd, onEdit, onDelete, onUpdateKeg, onRegisterLoss, onDeleteKeg, onTransferKeg, onEditKeg, onConfirmRequest
 }) => {
   const [selectedBrand, setSelectedBrand] = useState<string>('Todos');
   const [activeTab, setActiveTab] = useState<'inventory' | 'history' | 'analysis'>('inventory');

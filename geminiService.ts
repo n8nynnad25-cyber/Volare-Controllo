@@ -23,13 +23,13 @@ export async function chatWithAI(userMessage: string, currentState: AppState, us
     return "O assistente não está configurado. Verifique a chave de API da OpenAI.";
   }
 
-  // Ferramentas de Auditoria e Análise (Snapshots Completos dos Módulos)
+  // Ferramentas de Auditoria e Análise
   const tools: any[] = [
     {
       type: "function",
       function: {
         name: "get_cash_fund_audit",
-        description: "Obtém um relatório completo do Fundo de Caixa: saldos globais, totais por gerente e lista de todas as categorias e responsáveis ativos.",
+        description: "Consulta o módulo Fundo de Caixa: saldos, entradas, saídas, transferências entre gerentes e categorias de despesas.",
         parameters: { type: "object", properties: {} }
       }
     },
@@ -37,7 +37,7 @@ export async function chatWithAI(userMessage: string, currentState: AppState, us
       type: "function",
       function: {
         name: "get_fleet_audit",
-        description: "Obtém um relatório completo da Frota: quilometragem total, consumo de combustível, custos de abastecimento e lista de veículos com suas médias de consumo.",
+        description: "Consulta o módulo de Quilometragem e Frota: consumo de combustível, quilometragem percorrida, custo por viatura e médias de gasto.",
         parameters: { type: "object", properties: {} }
       }
     },
@@ -45,25 +45,33 @@ export async function chatWithAI(userMessage: string, currentState: AppState, us
       type: "function",
       function: {
         name: "get_keg_inventory_audit",
-        description: "Obtém um inventário completo de Barris: litros comprados, vendidos, perdidos, estoque atual e estatísticas detalhadas por marca (2M, Laurentina, etc).",
+        description: "Consulta o módulo de Venda de Barris: estoque, compras, vendas, perdas por marca e estatísticas mensais.",
         parameters: { type: "object", properties: {} }
       }
     }
   ];
 
   try {
-    const systemPrompt = `Você é o **Auditor Chefe Volare**, uma IA de alta precisão conectada ao Supabase do Restaurante/Estadão.
-    Sua função é analisar os dados dos 3 módulos (Caixa, Frota, Barris) e fornecer respostas irrefutáveis.
+    const systemPrompt = `Tu és o **VOLARE ASSISTENTE**, o Analista Digital Oficial do sistema Volare – Gestão & Operação.
 
-    DIRETRIZES CRÍTICAS:
-    1. **Sempre use as ferramentas**: Para QUALQUER pergunta sobre o negócio, chame a ferramenta de auditoria correspondente.
-    2. **Fatos, não suposições**: Use apenas os números retornados. Se o dado não existir, diga "Não há registos no sistema".
-    3. **Respostas Estruturadas**: 
-       - Resposta principal no **primeiro parágrafo**.
-       - Use **MTn** em negrito para valores monetários.
-       - Use tabelas ou listas se houver múltiplos itens (ex: litros por marca).
-    
-    DISPONIBILIDADE: Você responde sobre dinheiro (Caixa), veículos (Frota) e cerveja (Barris).`;
+Tua função é analisar as perguntas dos utilizadores sobre os três módulos principais:
+1. **Fundo de Caixa** (saldo, entradas/saídas, gerentes, dinheiro, transferência)
+2. **Quilometragem** (viaturas, moto, combustível, quilómetros, consumo, médias, gasto)
+3. **Venda de Barris** (vendas, perdas, estoque, marca, mês, quantidade)
+
+⚠️ REGRAS GERAIS (OBRIGATÓRIAS):
+- Nunca inventes dados. Nunca faças suposições.
+- Responde APENAS com base nos dados reais do sistema.
+- Identifica o módulo correcto automaticamente baseado na pergunta.
+- **PROIBIDO O USO DE TABELAS**: O sistema é visualizado maioritariamente em telemóveis. Apresenta os dados em **listas estruturadas**, **tópicos (bullets)** ou **blocos de texto curtos**.
+- Se a informação não existir ou estiver incompleta, informa: "Não existem registos suficientes na base de dados para responder com precisão."
+- Se a pergunta for fora do contexto dos três módulos: "Essa informação não pertence aos módulos Fundo de Caixa, Quilometragem ou Venda de Barris."
+- Linguagem profissional, clara e objectiva. Usa **MTn** para valores monetários.
+
+Ao responder, segue o formato mobile-friendly:
+- 📊 **Resumo curto** (identificando o módulo).
+- 📍 **Dados detalhados** (use listas com emojis ou negrito para destacar valores).
+- 💡 **Observação relevante** (se aplicável).`;
 
     // Primeira chamada
     const response = await openai.chat.completions.create({
@@ -99,9 +107,22 @@ export async function chatWithAI(userMessage: string, currentState: AppState, us
             const tout = data.filter(t => t.type === 'saida').reduce((acc, curr) => acc + Number(curr.amount), 0);
             return { gerente: m, entradas: tin, saidas: tout, saldo: tin - tout };
           });
+
+          const categories = Array.from(new Set(txs.map(t => t.category)));
+          const categoryStats = categories.map(c => {
+            const amount = txs.filter(t => t.category === c).reduce((acc, curr) => acc + Number(curr.amount), 0);
+            return { categoria: c, total: amount };
+          });
+
           const totalIn = txs.filter(t => t.type === 'entrada').reduce((acc, curr) => acc + Number(curr.amount), 0);
           const totalOut = txs.filter(t => t.type === 'saida').reduce((acc, curr) => acc + Number(curr.amount), 0);
-          result = { saldo_global: totalIn - totalOut, total_entradas: totalIn, total_saidas: totalOut, performance_por_gerente: managerStats };
+          result = {
+            saldo_global: totalIn - totalOut,
+            total_entradas: totalIn,
+            total_saidas: totalOut,
+            performance_por_gerente: managerStats,
+            gastos_por_categoria: categoryStats
+          };
         }
 
         // AUDITORIA de FROTA

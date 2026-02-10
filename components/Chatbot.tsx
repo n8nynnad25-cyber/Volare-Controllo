@@ -21,7 +21,7 @@ const Chatbot: React.FC<ChatbotProps> = ({ appState, user }) => {
   const userName = user?.name ? user.name.split(' ')[0] : 'Gestor';
 
   const [messages, setMessages] = useState<Message[]>([
-    { role: 'bot', text: `👋 Olá ${userName}! Sou o assistente da Volare. Como posso ajudar com os dados de hoje?`, time: '09:00' }
+    { role: 'bot', text: `👋 Olá ${userName}! Sou o **VOLARE ASSISTENTE**, o teu Analista Digital. Como posso ajudar com os dados de hoje?`, time: '09:00' }
   ]);
   const [input, setInput] = useState('');
   const [isTyping, setIsTyping] = useState(false);
@@ -64,7 +64,7 @@ const Chatbot: React.FC<ChatbotProps> = ({ appState, user }) => {
           if (!isOpen) {
             setMessages([{
               role: 'bot',
-              text: `👋 Olá ${userName}! Sou o assistente da Volare. Como posso ajudar com os dados de hoje?`,
+              text: `👋 Olá ${userName}! Sou o **VOLARE ASSISTENTE**, o teu Analista Digital. Como posso ajudar com os dados de hoje?`,
               time: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
             }]);
           }
@@ -87,8 +87,8 @@ const Chatbot: React.FC<ChatbotProps> = ({ appState, user }) => {
                 <span className="absolute bottom-0 right-0 size-2.5 bg-green-500 border-2 border-white rounded-full"></span>
               </div>
               <div>
-                <h3 className="text-base font-bold text-slate-900 leading-none">Volare Assistant</h3>
-                <p className="text-xs text-primary font-medium mt-1">Online</p>
+                <h3 className="text-base font-bold text-slate-900 leading-none">VOLARE ASSISTENTE</h3>
+                <p className="text-xs text-primary font-medium mt-1">Analista Digital</p>
               </div>
             </div>
             <button onClick={() => setIsOpen(false)} className="p-2 rounded-lg hover:bg-slate-200 text-slate-400">
@@ -103,7 +103,7 @@ const Chatbot: React.FC<ChatbotProps> = ({ appState, user }) => {
                   <span className="material-symbols-outlined text-[16px]">{m.role === 'bot' ? 'smart_toy' : 'person'}</span>
                 </div>
                 <div className={`flex flex-col gap-1 ${m.role === 'user' ? 'items-end' : ''}`}>
-                  <span className="text-[10px] text-slate-400 font-bold uppercase">{m.role === 'bot' ? 'Volare Bot' : 'Você'} • {m.time}</span>
+                  <span className="text-[10px] text-slate-400 font-bold uppercase">{m.role === 'bot' ? 'VOLARE ASSISTENTE' : 'Você'} • {m.time}</span>
                   <div className={`p-4 rounded-3xl text-sm leading-relaxed shadow-sm ring-1 ring-black/5 ${m.role === 'bot' ? 'bg-white text-slate-700 rounded-tl-none' : 'bg-primary text-white rounded-tr-none'}`}>
                     <div className="prose prose-sm prose-slate max-w-none 
                       prose-strong:text-slate-900 prose-strong:font-black

@@ -36,7 +36,7 @@ const Header: React.FC<HeaderProps> = ({ view, onMenuClick }) => {
       <div className="flex items-center gap-3">
         <button
           onClick={onMenuClick}
-          className="p-2 -ml-2 text-slate-500 hover:bg-slate-100 rounded-lg md:hidden transition-colors"
+          className="p-2 -ml-2 text-primary hover:bg-primary/5 rounded-lg md:hidden transition-colors"
         >
           <span className="material-symbols-outlined">menu</span>
         </button>

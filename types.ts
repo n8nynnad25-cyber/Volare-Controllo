@@ -1,5 +1,5 @@
 
-export type ViewType = 'dashboard' | 'cash-fund' | 'cash-fund-new' | 'cash-fund-edit' | 'mileage' | 'mileage-new' | 'mileage-edit' | 'keg-sales' | 'keg-sales-new' | 'keg-sales-edit' | 'keg-edit' | 'settings';
+export type ViewType = 'login' | 'dashboard' | 'cash-fund' | 'cash-fund-new' | 'cash-fund-edit' | 'mileage' | 'mileage-new' | 'mileage-edit' | 'keg-sales' | 'keg-sales-new' | 'keg-sales-edit' | 'keg-edit' | 'settings';
 
 export type UserRole = 'admin' | 'manager' | 'boss';
 

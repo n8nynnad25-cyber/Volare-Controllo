@@ -16,7 +16,8 @@ import LoginView from './views/LoginView';
 import Chatbot from './components/Chatbot';
 import Toast from './components/Toast';
 import ConfirmationModal from './components/ConfirmationModal';
-import { supabase } from './src/lib/supabase';
+import { supabase, supabaseUrl, supabaseKey } from './src/lib/supabase';
+import { createClient } from '@supabase/supabase-js';
 import { canCreate, canEdit, canDelete, canConfigure, canUseChatbot } from './src/utils/permissions';
 
 const App: React.FC = () => {
@@ -1218,55 +1219,66 @@ const App: React.FC = () => {
 
   const handleAddSystemUser = async (data: { name: string, email: string, password: string, role: string }) => {
     try {
-      const { error } = await supabase.functions.invoke('create-user', {
-        body: data
+      // 1. Validar campos
+      if (!data.email || !data.password || !data.name || !data.role) {
+        showToast("Por favor, preencha todos os campos obrigatórios.", "error");
+        return;
+      }
+
+      if (data.password.length < 6) {
+        showToast("A senha deve ter pelo menos 6 caracteres.", "error");
+        return;
+      }
+
+      // 2. Criar cliente temporário para não deslogar o administrador atual
+      // O Supabase Client por padrão persiste a sessão no localStorage.
+      // Usamos persistSession: false para que o signUp não substitua o login do admin.
+      const tempSupabase = createClient(supabaseUrl, supabaseKey, {
+        auth: {
+          persistSession: false,
+          autoRefreshToken: false,
+          detectSessionInUrl: false
+        }
       });
 
-      if (error) {
-        console.error("Erro ao criar utilizador:", error);
-
-        let errorMessage = "Erro desconhecido ao criar utilizador.";
-
-        // Try to parse detailed error from function response
-        // Try to parse detailed error from function response
-        if (typeof error === 'object' && error !== null) {
-          // Check if it's a FunctionsHttpError-like object with context
-          // @ts-ignore
-          if (error.context && typeof error.context.json === 'function') {
-            try {
-              // @ts-ignore
-              const body = await error.context.json();
-
-              if (body.details) {
-                errorMessage = body.details;
-                // Clean up "Auth session missing!" noise if present
-                if (errorMessage.includes("Auth session missing")) errorMessage = "Sessão expirada. Faça login novamente.";
-              } else if (body.error) {
-                errorMessage = body.error;
-              }
-            } catch (e) {
-              console.error("Failed to parse error body JSON", e);
-              // Fallback to text if json fails
-              try {
-                // @ts-ignore
-                const text = await error.context.text();
-                if (text) errorMessage = `Erro: ${text}`;
-              } catch (t) { }
-            }
-          } else if ('message' in error) {
-            // @ts-ignore
-            errorMessage = error.message;
+      // 3. Criar utilizador usando a API oficial de Auth
+      const { data: authData, error: authError } = await tempSupabase.auth.signUp({
+        email: data.email,
+        password: data.password,
+        options: {
+          data: {
+            name: data.name,
+            role: data.role.toLowerCase()
           }
+        }
+      });
+
+      if (authError) {
+        console.error("Erro no Supabase Auth:", authError);
+
+        // Tratamento de erros específicos conforme solicitado
+        let errorMessage = authError.message;
+        if (errorMessage.includes("already registered")) {
+          errorMessage = "Este e-mail já está registado no sistema.";
+        } else if (errorMessage.includes("Invalid email")) {
+          errorMessage = "O e-mail inserido é inválido.";
+        } else if (authError.status === 400 || authError.status === 422) {
+          errorMessage = `Falha na validação: ${authError.message}`;
         }
 
         showToast(errorMessage, 'error');
         return;
       }
 
-      showToast(`Utilizador ${data.name} criado com sucesso!`, 'success');
+      if (authData.user) {
+        showToast(`Utilizador ${data.name} criado com sucesso!`, 'success');
+        // Opcional: Se houver uma tabela de perfis extra, poderia ser inserido aqui,
+        // mas o sistema atual usa user_metadata.
+      }
+
     } catch (err: any) {
-      console.error("Erro na chamada da função:", err);
-      showToast(`Erro de conexão: ${err.message}`, 'error');
+      console.error("Erro inesperado na criação:", err);
+      showToast(`Falha na comunicação com Supabase: ${err.message}`, 'error');
     }
   };
 
