@@ -919,6 +919,7 @@ const App: React.FC = () => {
     }
   };
 
+
   const updateKeg = async (id: string, updates: Partial<Keg>) => {
     const dbUpdate: any = {};
     if (updates.status) dbUpdate.status = updates.status;
@@ -949,6 +950,40 @@ const App: React.FC = () => {
       });
     }
   };
+
+  const updateKegs = async (ids: string[], updates: Partial<Keg>) => {
+    const dbUpdate: any = {};
+    if (updates.status) dbUpdate.status = updates.status;
+    if (updates.currentLiters !== undefined) dbUpdate.current_liters = updates.currentLiters;
+    if (updates.activationDate) dbUpdate.activation_date = updates.activationDate;
+
+    const { error } = await supabase.from('kegs').update(dbUpdate).in('id', ids);
+
+    if (error) {
+      showToast("Erro ao atualizar barris.", "error");
+      return;
+    }
+
+    setState(prev => ({
+      ...prev,
+      kegs: prev.kegs.map(k => ids.includes(k.id) ? { ...k, ...updates } : k)
+    }));
+
+    // Notificações
+    ids.forEach(id => {
+      const original = state.kegs.find(k => k.id === id);
+      if (original && updates.status && updates.status !== original.status) {
+        addNotification({
+          module: 'Venda de Barris',
+          eventType: 'Actualizado',
+          entity: 'Barril',
+          referenceId: id,
+          summary: `✏️ Status do barril ${original.code} alterado para ${updates.status} (Massa)`
+        });
+      }
+    });
+  };
+
   const deleteKeg = async (id: string) => {
     const { error } = await supabase.from('kegs').delete().eq('id', id);
 
@@ -977,16 +1012,42 @@ const App: React.FC = () => {
     }
   };
 
+  const deleteKegs = async (ids: string[]) => {
+    const { error } = await supabase.from('kegs').delete().in('id', ids);
+
+    if (error) {
+      showToast("Erro ao remover barris.", "error");
+      return;
+    }
+
+    const originals = state.kegs.filter(k => ids.includes(k.id));
+
+    showToast(`${ids.length} barris removidos com sucesso.`, "success");
+    setState(prev => ({
+      ...prev,
+      kegs: prev.kegs.filter(k => !ids.includes(k.id))
+    }));
+
+    // Notificações
+    originals.forEach(original => {
+      addNotification({
+        module: 'Venda de Barris',
+        eventType: 'Eliminado',
+        entity: 'Barril',
+        referenceId: original.id,
+        summary: `🔴 Barril removido (Massa): ${original.brand} (${original.code})`
+      });
+    });
+  };
+
   const transferKeg = async (kegId: string, liters: number, destination: string) => {
-    // 1. Update Keg
     await updateKeg(kegId, {
       status: 'Transferido',
       currentLiters: 0
     });
 
-    // 2. Record Transfer Movement
     await addKegMovement({
-      id: '', // DB Generated
+      id: '',
       kegId: kegId,
       type: 'Transferência',
       liters: liters,
@@ -1005,6 +1066,103 @@ const App: React.FC = () => {
     showToast(`Transferência de ${liters}L concluída.`, "success");
   };
 
+  const transferKegs = async (ids: string[], destination: string) => {
+    await updateKegs(ids, {
+      status: 'Transferido',
+      currentLiters: 0
+    });
+
+    const movements = ids.map(id => {
+      const keg = state.kegs.find(k => k.id === id);
+      return {
+        keg_id: id,
+        type: 'Transferência',
+        liters: keg?.currentLiters || 0,
+        date: new Date().toISOString(),
+        description: `Transferência em massa para: ${destination}`,
+        user_id: user?.id
+      };
+    });
+
+    const { data: mData, error: mError } = await supabase.from('keg_movements').insert(movements).select();
+
+    if (mData) {
+      const savedMovements: KegMovement[] = mData.map(d => ({
+        id: d.id,
+        kegId: d.keg_id,
+        type: d.type,
+        liters: d.liters,
+        date: d.date,
+        description: d.description
+      }));
+      setState(prev => ({ ...prev, kegMovements: [...savedMovements, ...prev.kegMovements] }));
+    }
+
+    showToast(`${ids.length} barris transferidos para ${destination}.`, "success");
+  };
+
+  const registerKegLoss = async (kegId: string, liters: number, description: string = 'Barril estragado') => {
+    await updateKeg(kegId, {
+      status: 'Estragado',
+      currentLiters: 0
+    });
+
+    await addKegMovement({
+      id: '',
+      kegId: kegId,
+      type: 'Perda',
+      liters: liters,
+      date: new Date().toISOString(),
+      description: description
+    });
+
+    addNotification({
+      module: 'Venda de Barris',
+      eventType: 'Actualizado',
+      entity: 'Barril',
+      referenceId: kegId,
+      summary: `⚠️ Registo de PERDA no barril (${liters}L): ${description}`
+    });
+
+    showToast(`Perda de ${liters}L registada com sucesso.`, "success");
+  };
+
+  const registerKegLosses = async (items: { id: string, liters: number }[]) => {
+    const ids = items.map(i => i.id);
+
+    await updateKegs(ids, {
+      status: 'Estragado',
+      currentLiters: 0
+    });
+
+    const movements = items.map(item => {
+      const keg = state.kegs.find(k => k.id === item.id);
+      return {
+        keg_id: item.id,
+        type: 'Perda',
+        liters: item.liters,
+        date: new Date().toISOString(),
+        description: `Registo de perda em massa (${keg?.brand || 'Desconhecido'})`,
+        user_id: user?.id
+      };
+    });
+
+    const { data: mData, error: mError } = await supabase.from('keg_movements').insert(movements).select();
+
+    if (mData) {
+      const savedMovements: KegMovement[] = mData.map(d => ({
+        id: d.id,
+        kegId: d.keg_id,
+        type: d.type,
+        liters: d.liters,
+        date: d.date,
+        description: d.description
+      }));
+      setState(prev => ({ ...prev, kegMovements: [...savedMovements, ...prev.kegMovements] }));
+    }
+
+    showToast(`Perda registada para ${items.length} barris.`, "success");
+  };
 
   const addKegMovement = async (movement: KegMovement) => {
     const { data, error } = await supabase.from('keg_movements').insert([{
@@ -1031,12 +1189,7 @@ const App: React.FC = () => {
     }
   };
 
-  /**
-   * FIFO Engine for Sales Distribution
-   * Proccesses external sales volume and drains active kegs.
-   */
   const processExternalSales = async (brand: string, totalLiters: number, date: string) => {
-    // 1. Get active kegs for the brand, sorted by activation_date
     let remaining = totalLiters;
     const activeKegs = state.kegs
       .filter(k => k.brand === brand && k.status === 'Ativo' && k.currentLiters > 0)
@@ -1054,15 +1207,13 @@ const App: React.FC = () => {
       const newLiters = keg.currentLiters - consumption;
       const newStatus: KegStatus = newLiters <= 0 ? 'Esgotado' : 'Ativo';
 
-      // Update Keg
       await updateKeg(keg.id, {
         currentLiters: newLiters,
         status: newStatus
       });
 
-      // Record Movement
       await addKegMovement({
-        id: '', // Generated by DB
+        id: '',
         kegId: keg.id,
         type: 'Venda',
         liters: consumption,
@@ -1080,33 +1231,6 @@ const App: React.FC = () => {
     }
   };
 
-  const registerKegLoss = async (kegId: string, liters: number, description: string = 'Barril estragado') => {
-    // 1. Update Keg
-    await updateKeg(kegId, {
-      status: 'Estragado',
-      currentLiters: 0
-    });
-
-    // 2. Record Loss Movement
-    await addKegMovement({
-      id: '', // DB Generated
-      kegId: kegId,
-      type: 'Perda',
-      liters: liters,
-      date: new Date().toISOString(),
-      description: description
-    });
-
-    addNotification({
-      module: 'Venda de Barris',
-      eventType: 'Actualizado',
-      entity: 'Barril',
-      referenceId: kegId,
-      summary: `⚠️ Registo de PERDA no barril (${liters}L): ${description}`
-    });
-
-    showToast(`Perda de ${liters}L registada com sucesso.`, "success");
-  };
 
 
 
@@ -1694,6 +1818,10 @@ const App: React.FC = () => {
               setView('keg-edit');
             } : undefined}
             onConfirmRequest={showConfirm}
+            onBulkDelete={canDelete(user.role) ? deleteKegs : undefined}
+            onBulkUpdate={canEdit(user.role) ? updateKegs : undefined}
+            onBulkTransfer={canEdit(user.role) ? transferKegs : undefined}
+            onBulkRegisterLoss={canEdit(user.role) ? registerKegLosses : undefined}
           />
         );
       case 'keg-sales-new':

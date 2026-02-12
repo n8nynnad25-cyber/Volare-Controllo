@@ -20,13 +20,19 @@ interface KegSalesDashboardProps {
   onTransferKeg?: (id: string, liters: number, destination: string) => void;
   onEditKeg?: (keg: Keg) => void;
   onConfirmRequest?: (message: string) => Promise<boolean>;
+  onBulkDelete?: (ids: string[]) => void;
+  onBulkUpdate?: (ids: string[], updates: Partial<Keg>) => void;
+  onBulkTransfer?: (ids: string[], destination: string) => void;
+  onBulkRegisterLoss?: (items: { id: string, liters: number }[]) => void;
 }
 
 const KegSalesDashboard: React.FC<KegSalesDashboardProps> = ({
-  state, onAdd, onEdit, onDelete, onUpdateKeg, onRegisterLoss, onDeleteKeg, onTransferKeg, onEditKeg, onConfirmRequest
+  state, onAdd, onEdit, onDelete, onUpdateKeg, onRegisterLoss, onDeleteKeg, onTransferKeg, onEditKeg, onConfirmRequest,
+  onBulkDelete, onBulkUpdate, onBulkTransfer, onBulkRegisterLoss
 }) => {
   const [selectedBrand, setSelectedBrand] = useState<string>('Todos');
   const [activeTab, setActiveTab] = useState<'inventory' | 'history' | 'analysis'>('inventory');
+  const [selectedKegIds, setSelectedKegIds] = useState<string[]>([]);
 
   // Estados para Filtro
   const [startDate, setStartDate] = useState<string>('');
@@ -79,6 +85,26 @@ const KegSalesDashboard: React.FC<KegSalesDashboardProps> = ({
     result = result.filter(k => isWithinPeriod(k.purchaseDate));
     return result;
   }, [state.kegs, selectedBrand, filterStatus, filterSearch, startDate, endDate]);
+
+  // Bulk Selection Handlers
+  const toggleSelectKeg = (id: string) => {
+    setSelectedKegIds(prev =>
+      prev.includes(id) ? prev.filter(kId => kId !== id) : [...prev, id]
+    );
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedKegIds.length === filteredKegs.length) {
+      setSelectedKegIds([]);
+    } else {
+      setSelectedKegIds(filteredKegs.map(k => k.id));
+    }
+  };
+
+  const selectedKegs = useMemo(() =>
+    state.kegs.filter(k => selectedKegIds.includes(k.id)),
+    [state.kegs, selectedKegIds]
+  );
 
   const filteredMovements = useMemo(() => {
     let result = state.kegMovements;
@@ -208,6 +234,89 @@ const KegSalesDashboard: React.FC<KegSalesDashboardProps> = ({
 
     if (confirmed && onTransferKeg) {
       onTransferKeg(keg.id, keg.currentLiters, destination);
+    }
+  };
+
+  const handleBulkActivate = async () => {
+    const activeable = selectedKegs.filter(k => k.status === 'Novo');
+    if (activeable.length === 0) return;
+
+    const confirmed = onConfirmRequest
+      ? await onConfirmRequest(`Deseja ATIVAR ${activeable.length} barris selecionados?`)
+      : confirm(`Deseja ATIVAR ${activeable.length} barris selecionados?`);
+
+    if (confirmed) {
+      if (onBulkUpdate) {
+        onBulkUpdate(activeable.map(k => k.id), {
+          status: 'Ativo',
+          activationDate: new Date().toISOString()
+        });
+      } else if (onUpdateKeg) {
+        for (const k of activeable) {
+          await onUpdateKeg(k.id, { status: 'Ativo', activationDate: new Date().toISOString() });
+        }
+      }
+      setSelectedKegIds([]);
+    }
+  };
+
+  const handleBulkDelete = async () => {
+    const confirmed = onConfirmRequest
+      ? await onConfirmRequest(`Tem certeza que deseja APAGAR ${selectedKegIds.length} barris selecionados? Esta ação não pode ser desfeita.`)
+      : confirm(`Tem certeza que deseja APAGAR ${selectedKegIds.length} barris selecionados? Esta ação não pode ser desfeita.`);
+
+    if (confirmed) {
+      if (onBulkDelete) {
+        onBulkDelete(selectedKegIds);
+      } else if (onDeleteKeg) {
+        for (const id of selectedKegIds) {
+          await onDeleteKeg(id);
+        }
+      }
+      setSelectedKegIds([]);
+    }
+  };
+
+  const handleBulkTransfer = async () => {
+    const transferable = selectedKegs.filter(k => k.status === 'Novo' || k.status === 'Ativo');
+    if (transferable.length === 0) return;
+
+    const destination = prompt(`Para qual destino deseja transferir os ${transferable.length} barris?`);
+    if (!destination) return;
+
+    const confirmed = onConfirmRequest
+      ? await onConfirmRequest(`Confirma a transferência de ${transferable.length} barris para ${destination}?`)
+      : confirm(`Confirma a transferência de ${transferable.length} barris para ${destination}?`);
+
+    if (confirmed) {
+      if (onBulkTransfer) {
+        onBulkTransfer(transferable.map(k => k.id), destination);
+      } else if (onTransferKeg) {
+        for (const k of transferable) {
+          await onTransferKeg(k.id, k.currentLiters, destination);
+        }
+      }
+      setSelectedKegIds([]);
+    }
+  };
+
+  const handleBulkLoss = async () => {
+    const lossable = selectedKegs.filter(k => k.status === 'Novo' || k.status === 'Ativo');
+    if (lossable.length === 0) return;
+
+    const confirmed = onConfirmRequest
+      ? await onConfirmRequest(`Deseja marcar ${lossable.length} barris como ESTRAGADOS? Todo o volume restante será registado como PERDA.`)
+      : confirm(`Deseja marcar ${lossable.length} barris como ESTRAGADOS? Todo o volume restante será registado como PERDA.`);
+
+    if (confirmed) {
+      if (onBulkRegisterLoss) {
+        onBulkRegisterLoss(lossable.map(k => ({ id: k.id, liters: k.currentLiters })));
+      } else if (onRegisterLoss) {
+        for (const k of lossable) {
+          await onRegisterLoss(k.id, k.currentLiters, `Perda em massa: Barril estragado (${k.brand})`);
+        }
+      }
+      setSelectedKegIds([]);
     }
   };
 
@@ -383,7 +492,17 @@ const KegSalesDashboard: React.FC<KegSalesDashboardProps> = ({
           <table className="w-full text-left">
             <thead className="bg-slate-50 text-[10px] font-black uppercase tracking-widest text-slate-400 border-b">
               <tr>
-                <th className="px-8 py-5">Código</th>
+                <th className="px-6 py-5 w-10">
+                  <div className="flex items-center justify-center">
+                    <input
+                      type="checkbox"
+                      checked={filteredKegs.length > 0 && selectedKegIds.length === filteredKegs.length}
+                      onChange={toggleSelectAll}
+                      className="w-4 h-4 rounded border-slate-300 text-primary focus:ring-primary cursor-pointer"
+                    />
+                  </div>
+                </th>
+                <th className="px-6 py-5">Código</th>
                 <th className="px-8 py-5">Marca</th>
                 <th className="px-8 py-5">Capacidade</th>
                 <th className="px-8 py-5">Saldo Atual</th>
@@ -393,8 +512,22 @@ const KegSalesDashboard: React.FC<KegSalesDashboardProps> = ({
             </thead>
             <tbody className="divide-y font-bold text-xs">
               {filteredKegs.map(keg => (
-                <tr key={keg.id} className="hover:bg-slate-50 transition-colors">
-                  <td className="px-8 py-4 font-mono text-slate-500">{keg.code}</td>
+                <tr
+                  key={keg.id}
+                  className={`hover:bg-slate-50 transition-colors ${selectedKegIds.includes(keg.id) ? 'bg-primary/5' : ''}`}
+                  onClick={() => toggleSelectKeg(keg.id)}
+                >
+                  <td className="px-6 py-4" onClick={(e) => e.stopPropagation()}>
+                    <div className="flex items-center justify-center">
+                      <input
+                        type="checkbox"
+                        checked={selectedKegIds.includes(keg.id)}
+                        onChange={() => toggleSelectKeg(keg.id)}
+                        className="w-4 h-4 rounded border-slate-300 text-primary focus:ring-primary cursor-pointer"
+                      />
+                    </div>
+                  </td>
+                  <td className="px-6 py-4 font-mono text-slate-500">{keg.code}</td>
                   <td className="px-8 py-4 uppercase text-slate-900">{keg.brand}</td>
                   <td className="px-8 py-4 text-slate-400">{keg.capacity}L</td>
                   <td className="px-8 py-4">
@@ -456,11 +589,69 @@ const KegSalesDashboard: React.FC<KegSalesDashboardProps> = ({
               ))}
               {filteredKegs.length === 0 && (
                 <tr>
-                  <td colSpan={6} className="px-8 py-20 text-center text-slate-400 italic">Nenhum barril encontrado no intervalo selecionado.</td>
+                  <td colSpan={7} className="px-8 py-20 text-center text-slate-400 italic">Nenhum barril encontrado no intervalo selecionado.</td>
                 </tr>
               )}
             </tbody>
           </table>
+
+          {/* Bulk Action Bar */}
+          {selectedKegIds.length > 0 && (
+            <div className="fixed bottom-8 left-1/2 -translate-x-1/2 z-50 animate-in slide-in-from-bottom-10 duration-500">
+              <div className="bg-slate-900 text-white rounded-2xl p-4 shadow-2xl flex items-center gap-8 border border-slate-800">
+                <div className="flex flex-col">
+                  <span className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-500">Selecionados</span>
+                  <span className="text-xl font-black">{selectedKegIds.length} <span className="text-xs text-slate-400">Barril(s)</span></span>
+                </div>
+
+                <div className="h-8 w-px bg-slate-800"></div>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={(e) => { e.stopPropagation(); handleBulkActivate(); }}
+                    className="flex flex-col items-center gap-1 px-4 py-2 hover:bg-slate-800 rounded-xl transition-all group"
+                  >
+                    <span className="material-symbols-outlined text-[20px] text-emerald-400 group-hover:scale-110">play_circle</span>
+                    <span className="text-[9px] font-bold uppercase tracking-widest">Ativar</span>
+                  </button>
+
+                  <button
+                    onClick={(e) => { e.stopPropagation(); handleBulkTransfer(); }}
+                    className="flex flex-col items-center gap-1 px-4 py-2 hover:bg-slate-800 rounded-xl transition-all group"
+                  >
+                    <span className="material-symbols-outlined text-[20px] text-purple-400 group-hover:scale-110">move_up</span>
+                    <span className="text-[9px] font-bold uppercase tracking-widest">Transferir</span>
+                  </button>
+
+                  <button
+                    onClick={(e) => { e.stopPropagation(); handleBulkLoss(); }}
+                    className="flex flex-col items-center gap-1 px-4 py-2 hover:bg-slate-800 rounded-xl transition-all group"
+                  >
+                    <span className="material-symbols-outlined text-[20px] text-rose-400 group-hover:scale-110">report_problem</span>
+                    <span className="text-[9px] font-bold uppercase tracking-widest">Perda</span>
+                  </button>
+
+                  <button
+                    onClick={(e) => { e.stopPropagation(); handleBulkDelete(); }}
+                    className="flex flex-col items-center gap-1 px-4 py-2 hover:bg-slate-800 rounded-xl transition-all group"
+                  >
+                    <span className="material-symbols-outlined text-[20px] text-slate-400 group-hover:text-rose-500 transition-colors group-hover:scale-110">delete</span>
+                    <span className="text-[9px] font-bold uppercase tracking-widest">Apagar</span>
+                  </button>
+                </div>
+
+                <div className="h-8 w-px bg-slate-800"></div>
+
+                <button
+                  onClick={(e) => { e.stopPropagation(); setSelectedKegIds([]); }}
+                  className="p-2 hover:bg-slate-800 rounded-lg transition-all"
+                  title="Desmarcar Todos"
+                >
+                  <span className="material-symbols-outlined text-[20px] text-slate-500">close</span>
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
