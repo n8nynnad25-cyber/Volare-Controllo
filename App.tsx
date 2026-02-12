@@ -219,6 +219,32 @@ const App: React.FC = () => {
     }));
   };
 
+  const deleteNotification = async (id: string) => {
+    const { error } = await supabase.from('notifications').delete().eq('id', id);
+    if (error) {
+      console.error("Erro ao eliminar notificação:", error);
+      showToast(`Erro ao eliminar notificação: ${error.message}`, "error");
+      return;
+    }
+    setState(prev => ({
+      ...prev,
+      notifications: prev.notifications.filter(n => n.id !== id)
+    }));
+  };
+
+  const deleteNotifications = async (ids: string[]) => {
+    const { error } = await supabase.from('notifications').delete().in('id', ids);
+    if (error) {
+      console.error("Erro ao eliminar notificações:", error);
+      showToast(`Erro ao eliminar notificações: ${error.message}`, "error");
+      return;
+    }
+    setState(prev => ({
+      ...prev,
+      notifications: prev.notifications.filter(n => !ids.includes(n.id))
+    }));
+  };
+
   const getFilteredNotifications = (allNotifications: SystemNotification[]) => {
     if (!user) return [];
 
@@ -1925,6 +1951,9 @@ const App: React.FC = () => {
             notifications={filteredNotifications}
             onMarkAsRead={markNotificationAsRead}
             onMarkAllAsRead={markAllNotificationsAsRead}
+            onDelete={deleteNotification}
+            onDeleteBulk={deleteNotifications}
+            onConfirmRequest={showConfirm}
             userRole={user.role}
           />
         );
