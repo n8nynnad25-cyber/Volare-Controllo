@@ -23,6 +23,8 @@ interface SettingsViewProps {
     onImportBackup?: (data: any) => Promise<void>;
     onClearData?: () => Promise<void>;
     onCreateSystemUser?: (data: { name: string, email: string, password: string, role: string }) => Promise<void>;
+    onUpdateUserRole?: (id: string, role: any) => Promise<void>;
+    onDeleteUser?: (id: string) => Promise<void>;
 }
 
 type Tab = 'general' | 'users' | 'categories' | 'managers' | 'vehicles' | 'kegs';
@@ -47,7 +49,9 @@ const SettingsView: React.FC<SettingsViewProps> = ({
     onConfirmRequest,
     onImportBackup,
     onClearData,
-    onCreateSystemUser
+    onCreateSystemUser,
+    onUpdateUserRole,
+    onDeleteUser
 }) => {
     const [activeTab, setActiveTab] = useState<Tab>('general');
 
@@ -353,13 +357,77 @@ const SettingsView: React.FC<SettingsViewProps> = ({
                                     </button>
                                 </div>
                             </div>
-
                             <div className="p-4 bg-blue-50 text-blue-800 rounded-xl text-sm flex gap-3 items-start">
                                 <span className="material-symbols-outlined shrink-0">info</span>
                                 <p>
                                     Ao criar um utilizador, ele poderá fazer login imediatamente com o e-mail e senha definidos.
                                     O <strong>Cargo</strong> define o que ele pode ver e fazer no sistema (ex: Admin pode tudo, Gerente não pode apagar dados).
                                 </p>
+                            </div>
+
+                            <div className="space-y-4">
+                                <div className="flex justify-between items-center border-b border-slate-100 pb-4">
+                                    <h3 className="text-xl font-black text-slate-800 uppercase">Utilizadores Existentes</h3>
+                                </div>
+
+                                <div className="overflow-hidden rounded-xl border border-slate-100">
+                                    <table className="w-full text-left text-sm">
+                                        <thead className="bg-slate-50 text-slate-500 font-bold uppercase text-xs">
+                                            <tr>
+                                                <th className="px-6 py-3">Nome / E-mail</th>
+                                                <th className="px-6 py-3">Cargo Atual</th>
+                                                <th className="px-6 py-3 text-right">Ações</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-slate-100">
+                                            {state.systemUsers && state.systemUsers.map((u) => (
+                                                <tr key={u.id} className="hover:bg-slate-50">
+                                                    <td className="px-6 py-4">
+                                                        <div className="flex flex-col">
+                                                            <span className="font-bold text-slate-800">{u.name}</span>
+                                                            <span className="text-xs text-slate-500">{u.email}</span>
+                                                        </div>
+                                                    </td>
+                                                    <td className="px-6 py-4">
+                                                        <select
+                                                            value={u.role}
+                                                            onChange={(e) => onUpdateUserRole?.(u.id, e.target.value)}
+                                                            className="px-3 py-1.5 rounded-lg border border-slate-200 text-xs font-bold focus:outline-none focus:ring-1 focus:ring-primary"
+                                                            disabled={u.id === user.id} // Não permitir que o próprio admin se despromova (evita lock-out)
+                                                        >
+                                                            <option value="admin">Administrador</option>
+                                                            <option value="manager">Gerente</option>
+                                                            <option value="boss">Boss</option>
+                                                        </select>
+                                                    </td>
+                                                    <td className="px-6 py-4 text-right">
+                                                        <button
+                                                            onClick={async () => {
+                                                                if (u.id === user.id) return;
+                                                                const confirmed = onConfirmRequest
+                                                                    ? await onConfirmRequest(`Tem certeza que deseja remover o acesso de ${u.name}?`)
+                                                                    : confirm(`Tem certeza?`);
+                                                                if (confirmed) onDeleteUser?.(u.id);
+                                                            }}
+                                                            disabled={u.id === user.id}
+                                                            className="p-2 text-rose-600 hover:bg-rose-50 rounded-lg transition-colors disabled:opacity-30"
+                                                            title="Remover Acesso"
+                                                        >
+                                                            <span className="material-symbols-outlined text-[20px]">person_remove</span>
+                                                        </button>
+                                                    </td>
+                                                </tr>
+                                            ))}
+                                            {(!state.systemUsers || state.systemUsers.length === 0) && (
+                                                <tr>
+                                                    <td colSpan={3} className="px-6 py-10 text-center text-slate-400 italic">
+                                                        Nenhum utilizador encontrado na lista de gestão.
+                                                    </td>
+                                                </tr>
+                                            )}
+                                        </tbody>
+                                    </table>
+                                </div>
                             </div>
                         </div>
                     )}

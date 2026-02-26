@@ -11,6 +11,14 @@ export interface User {
   avatar: string;
 }
 
+export interface SystemUser {
+  id: string;
+  name: string;
+  email: string;
+  role: UserRole;
+  created_at?: string;
+}
+
 export type NotificationModule = 'Fundo de Caixa' | 'Quilometragem' | 'Venda de Barris';
 export type NotificationEvent = 'Criado' | 'Actualizado' | 'Eliminado';
 
@@ -134,5 +142,6 @@ export interface AppState {
   toasts: ToastMessage[];
   notifications: SystemNotification[];
   confirmationModal: ConfirmationModalState;
+  systemUsers: SystemUser[];
 }
 

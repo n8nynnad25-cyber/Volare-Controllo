@@ -26,7 +26,8 @@ export const INITIAL_STATE: AppState = {
     message: '',
     onConfirm: () => { },
     onCancel: () => { }
-  }
+  },
+  systemUsers: []
 };
 
 export const BRAND_COLORS: Record<string, string> = {

@@ -1,6 +1,6 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
-import { ViewType, AppState, CashTransaction, MileageRecord, KegSale, User, TransactionCategory, Manager, Vehicle, KegBrand, UserRole, Keg, KegStatus, KegMovement, KegOperationType, NotificationModule, NotificationEvent, SystemNotification } from './types';
+import { ViewType, AppState, CashTransaction, MileageRecord, KegSale, User, TransactionCategory, Manager, Vehicle, KegBrand, UserRole, Keg, KegStatus, KegMovement, KegOperationType, NotificationModule, NotificationEvent, SystemNotification, SystemUser } from './types';
 import { INITIAL_STATE } from './constants';
 import Sidebar from './components/Sidebar';
 import Header from './components/Header';
@@ -77,12 +77,19 @@ const App: React.FC = () => {
     return () => subscription.unsubscribe();
   }, []);
 
-  const mapUser = (supabaseUser: any) => {
+  const mapUser = async (supabaseUser: any) => {
     if (!supabaseUser) return;
 
-    // Normalizar a role vinda do Supabase para os nossos tipos internos
-    const rawRole = supabaseUser.user_metadata?.role?.toLowerCase() || '';
-    let userRole: UserRole = 'manager'; // Default seguro (Gerente tem permissões médias)
+    // 1. Tentar buscar o perfil na tabela 'profiles' para ter o cargo mais atualizado
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('role, name')
+      .eq('id', supabaseUser.id)
+      .single();
+
+    // Normalizar a role (prioridade para a tabela profiles, fallback para metadata)
+    const rawRole = (profile?.role || supabaseUser.user_metadata?.role || '').toLowerCase();
+    let userRole: UserRole = 'manager';
 
     if (rawRole.includes('admin') || rawRole.includes('administrador')) {
       userRole = 'admin';
@@ -92,13 +99,25 @@ const App: React.FC = () => {
       userRole = 'manager';
     }
 
-    setUser({
+    const userData: User = {
       id: supabaseUser.id,
-      name: supabaseUser.user_metadata.name || supabaseUser.email?.split('@')[0] || 'Usuário',
+      name: profile?.name || supabaseUser.user_metadata.name || supabaseUser.email?.split('@')[0] || 'Usuário',
       email: supabaseUser.email || '',
       role: userRole,
       avatar: supabaseUser.user_metadata.avatar_url || `https://ui-avatars.com/api/?name=${supabaseUser.email?.split('@')[0] || 'U'}&background=random`
-    });
+    };
+
+    setUser(userData);
+
+    // 2. Auto-sincronizar o perfil se não existir (para utilizadores antigos ou criados manualmente)
+    if (!profile) {
+      await supabase.from('profiles').upsert([{
+        id: userData.id,
+        name: userData.name,
+        email: userData.email,
+        role: userData.role
+      }]);
+    }
   };
 
   const handleLogin = (newUser: User) => {
@@ -476,6 +495,23 @@ const App: React.FC = () => {
           console.error('Error fetching keg brands:', brandError);
         } else if (brandData) {
           setState(prev => ({ ...prev, kegBrands: brandData }));
+        }
+
+        // Fetch System Users for Role Management
+        const { data: profilesData, error: profilesError } = await supabase
+          .from('profiles')
+          .select('*')
+          .order('created_at', { ascending: false });
+
+        if (!profilesError && profilesData) {
+          const mappedUsers: SystemUser[] = profilesData.map(p => ({
+            id: p.id,
+            name: p.name,
+            email: p.email,
+            role: p.role as UserRole,
+            created_at: p.created_at
+          }));
+          setState(prev => ({ ...prev, systemUsers: mappedUsers }));
         }
       } catch (err) {
         console.error("Critical error during initial data fetch:", err);
@@ -1731,15 +1767,68 @@ const App: React.FC = () => {
       }
 
       if (authData.user) {
+        // 4. Também inserir na tabela 'profiles' para que apareça na lista de gestão
+        await supabase.from('profiles').insert([{
+          id: authData.user.id,
+          name: data.name,
+          email: data.email,
+          role: data.role
+        }]);
+
         showToast(`Utilizador ${data.name} criado com sucesso!`, 'success');
-        // Opcional: Se houver uma tabela de perfis extra, poderia ser inserido aqui,
-        // mas o sistema atual usa user_metadata.
+
+        // Atualizar lista local
+        const newUser: SystemUser = {
+          id: authData.user.id,
+          name: data.name,
+          email: data.email,
+          role: data.role as UserRole
+        };
+        setState(prev => ({ ...prev, systemUsers: [newUser, ...prev.systemUsers] }));
       }
 
     } catch (err: any) {
       console.error("Erro inesperado na criação:", err);
       showToast(`Falha na comunicação com Supabase: ${err.message}`, 'error');
     }
+  };
+
+  const updateSystemUserRole = async (id: string, role: UserRole) => {
+    const { error } = await supabase
+      .from('profiles')
+      .update({ role })
+      .eq('id', id);
+
+    if (error) {
+      console.error('Error updating user role:', error);
+      showToast('Erro ao atualizar permissão!', 'error');
+      return;
+    }
+
+    showToast('Permissão atualizada com sucesso!', 'success');
+    setState(prev => ({
+      ...prev,
+      systemUsers: prev.systemUsers.map(u => u.id === id ? { ...u, role } : u)
+    }));
+  };
+
+  const deleteSystemUser = async (id: string) => {
+    const { error } = await supabase
+      .from('profiles')
+      .delete()
+      .eq('id', id);
+
+    if (error) {
+      console.error('Error deleting profile:', error);
+      showToast('Erro ao remover perfil!', 'error');
+      return;
+    }
+
+    showToast('Perfil removido da lista de gestão.', 'success');
+    setState(prev => ({
+      ...prev,
+      systemUsers: prev.systemUsers.filter(u => u.id !== id)
+    }));
   };
 
   if (!user) {
@@ -1943,6 +2032,8 @@ const App: React.FC = () => {
             onImportBackup={importBackup}
             onClearData={clearData}
             onCreateSystemUser={handleAddSystemUser}
+            onUpdateUserRole={updateSystemUserRole}
+            onDeleteUser={deleteSystemUser}
           />
         );
       case 'notifications':
