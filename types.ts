@@ -19,6 +19,23 @@ export interface SystemUser {
   created_at?: string;
 }
 
+export interface ModulePermission {
+  view: boolean;
+  manage: boolean;
+}
+
+export interface RolePermissions {
+  role: UserRole;
+  dashboard: ModulePermission;
+  cashFund: ModulePermission;
+  mileage: ModulePermission;
+  kegs: ModulePermission;
+  notifications: ModulePermission;
+  settings: ModulePermission;
+  canDelete: boolean;
+  canAccessChatbot: boolean;
+}
+
 export type NotificationModule = 'Fundo de Caixa' | 'Quilometragem' | 'Venda de Barris';
 export type NotificationEvent = 'Criado' | 'Actualizado' | 'Eliminado';
 
@@ -143,5 +160,6 @@ export interface AppState {
   notifications: SystemNotification[];
   confirmationModal: ConfirmationModalState;
   systemUsers: SystemUser[];
+  rolePermissions: RolePermissions[];
 }
 

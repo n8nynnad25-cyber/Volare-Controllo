@@ -27,7 +27,42 @@ export const INITIAL_STATE: AppState = {
     onConfirm: () => { },
     onCancel: () => { }
   },
-  systemUsers: []
+  systemUsers: [],
+  rolePermissions: [
+    {
+      role: 'admin',
+      dashboard: { view: true, manage: true },
+      cashFund: { view: true, manage: true },
+      mileage: { view: true, manage: true },
+      kegs: { view: true, manage: true },
+      notifications: { view: true, manage: true },
+      settings: { view: true, manage: true },
+      canDelete: true,
+      canAccessChatbot: true
+    },
+    {
+      role: 'manager',
+      dashboard: { view: true, manage: true },
+      cashFund: { view: true, manage: true },
+      mileage: { view: true, manage: true },
+      kegs: { view: true, manage: true },
+      notifications: { view: true, manage: true },
+      settings: { view: false, manage: false },
+      canDelete: false,
+      canAccessChatbot: true
+    },
+    {
+      role: 'boss',
+      dashboard: { view: true, manage: false },
+      cashFund: { view: true, manage: false },
+      mileage: { view: true, manage: false },
+      kegs: { view: true, manage: false },
+      notifications: { view: true, manage: false },
+      settings: { view: false, manage: false },
+      canDelete: false,
+      canAccessChatbot: true
+    }
+  ]
 };
 
 export const BRAND_COLORS: Record<string, string> = {

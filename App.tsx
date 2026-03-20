@@ -1,6 +1,6 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
-import { ViewType, AppState, CashTransaction, MileageRecord, KegSale, User, TransactionCategory, Manager, Vehicle, KegBrand, UserRole, Keg, KegStatus, KegMovement, KegOperationType, NotificationModule, NotificationEvent, SystemNotification, SystemUser } from './types';
+import { ViewType, AppState, CashTransaction, MileageRecord, KegSale, User, TransactionCategory, Manager, Vehicle, KegBrand, UserRole, Keg, KegStatus, KegMovement, KegOperationType, NotificationModule, NotificationEvent, SystemNotification, SystemUser, RolePermissions } from './types';
 import { INITIAL_STATE } from './constants';
 import Sidebar from './components/Sidebar';
 import Header from './components/Header';
@@ -19,7 +19,7 @@ import Toast from './components/Toast';
 import ConfirmationModal from './components/ConfirmationModal';
 import { supabase, supabaseUrl, supabaseKey } from './src/lib/supabase';
 import { createClient } from '@supabase/supabase-js';
-import { canCreate, canEdit, canDelete, canConfigure, canUseChatbot } from './src/utils/permissions';
+import { canConfigure, canUseChatbot, canViewModule, canManageModule, canDelete } from './src/utils/permissions';
 
 const App: React.FC = () => {
   const [view, setView] = useState<ViewType>('dashboard');
@@ -513,6 +513,36 @@ const App: React.FC = () => {
           }));
           setState(prev => ({ ...prev, systemUsers: mappedUsers }));
         }
+
+        // Fetch Role Permissions
+        const { data: rolesData, error: rolesError } = await supabase
+          .from('role_permissions')
+          .select('*');
+
+        if (!rolesError && rolesData && rolesData.length > 0) {
+          const mappedRoles: RolePermissions[] = rolesData.map(r => ({
+            role: r.role as UserRole,
+            dashboard: r.permissions.dashboard,
+            cashFund: r.permissions.cashFund,
+            mileage: r.permissions.mileage,
+            kegs: r.permissions.kegs,
+            notifications: r.permissions.notifications,
+            settings: r.permissions.settings,
+            canDelete: r.permissions.canDelete,
+            canAccessChatbot: r.permissions.canAccessChatbot
+          }));
+
+          setState(prev => {
+            const newPermissions = [...prev.rolePermissions];
+            mappedRoles.forEach(mr => {
+              const idx = newPermissions.findIndex(p => p.role === mr.role);
+              if (idx > -1) newPermissions[idx] = mr;
+              else newPermissions.push(mr);
+            });
+            return { ...prev, rolePermissions: newPermissions };
+          });
+        }
+
       } catch (err) {
         console.error("Critical error during initial data fetch:", err);
       }
@@ -1831,6 +1861,39 @@ const App: React.FC = () => {
     }));
   };
 
+  const updateRolePermissions = async (role: UserRole, permissions: RolePermissions) => {
+    // Sync to Supabase
+    const { error } = await supabase
+      .from('role_permissions')
+      .upsert([{
+        role: role,
+        permissions: {
+          dashboard: permissions.dashboard,
+          cashFund: permissions.cashFund,
+          mileage: permissions.mileage,
+          kegs: permissions.kegs,
+          notifications: permissions.notifications,
+          settings: permissions.settings,
+          canDelete: permissions.canDelete,
+          canAccessChatbot: permissions.canAccessChatbot
+        },
+        updated_at: new Date().toISOString()
+      }]);
+
+    if (error) {
+      console.error('Error updating role permissions:', error);
+      showToast('Erro ao gravar no servidor, mas actualizado localmente.', 'info');
+    } else {
+      showToast('Permissões actualizadas!', 'success');
+    }
+
+    // Update local state
+    setState(prev => ({
+      ...prev,
+      rolePermissions: prev.rolePermissions.map(p => p.role === role ? permissions : p)
+    }));
+  };
+
   if (!user) {
     return <LoginView onLogin={handleLogin} />;
   }
@@ -1843,15 +1906,15 @@ const App: React.FC = () => {
         return (
           <CashFundDashboard
             state={state}
-            onAdd={canCreate(user.role) ? () => {
+            onAdd={canManageModule('cashFund', user.role, state.rolePermissions) ? () => {
               setEditingTransaction(null);
               setView('cash-fund-new');
             } : undefined}
-            onEdit={canEdit(user.role) ? (tx) => {
+            onEdit={canManageModule('cashFund', user.role, state.rolePermissions) ? (tx) => {
               setEditingTransaction(tx);
               setView('cash-fund-edit');
             } : undefined}
-            onDelete={canDelete(user.role) ? deleteCashTransaction : undefined}
+            onDelete={canDelete(user.role, state.rolePermissions) ? deleteCashTransaction : undefined}
             onConfirmRequest={showConfirm}
           />
         );
@@ -1879,15 +1942,15 @@ const App: React.FC = () => {
         return (
           <MileageDashboard
             state={state}
-            onAdd={canCreate(user.role) ? () => {
+            onAdd={canManageModule('mileage', user.role, state.rolePermissions) ? () => {
               setEditingMileageRecord(null);
               setView('mileage-new');
             } : undefined}
-            onEdit={canEdit(user.role) ? (record) => {
+            onEdit={canManageModule('mileage', user.role, state.rolePermissions) ? (record) => {
               setEditingMileageRecord(record);
               setView('mileage-edit');
             } : undefined}
-            onDelete={canDelete(user.role) ? deleteMileageRecord : undefined}
+            onDelete={canDelete(user.role, state.rolePermissions) ? deleteMileageRecord : undefined}
             onConfirmRequest={showConfirm}
           />
         );
@@ -1915,28 +1978,28 @@ const App: React.FC = () => {
         return (
           <KegSalesDashboard
             state={state}
-            onAdd={canCreate(user.role) ? () => {
+            onAdd={canManageModule('kegs', user.role, state.rolePermissions) ? () => {
               setEditingKegSale(null);
               setView('keg-sales-new');
             } : undefined}
-            onEdit={canEdit(user.role) ? (sale) => {
+            onEdit={canManageModule('kegs', user.role, state.rolePermissions) ? (sale) => {
               setEditingKegSale(sale);
               setView('keg-sales-edit');
             } : undefined}
-            onDelete={canDelete(user.role) ? deleteKegSale : undefined}
-            onUpdateKeg={updateKeg}
-            onRegisterLoss={registerKegLoss}
-            onDeleteKeg={canDelete(user.role) ? deleteKeg : undefined}
-            onTransferKeg={canEdit(user.role) ? transferKeg : undefined}
-            onEditKeg={canEdit(user.role) ? (keg) => {
+            onDelete={canDelete(user.role, state.rolePermissions) ? deleteKegSale : undefined}
+            onUpdateKeg={canManageModule('kegs', user.role, state.rolePermissions) ? updateKeg : undefined}
+            onRegisterLoss={canManageModule('kegs', user.role, state.rolePermissions) ? registerKegLoss : undefined}
+            onDeleteKeg={canDelete(user.role, state.rolePermissions) ? deleteKeg : undefined}
+            onTransferKeg={canManageModule('kegs', user.role, state.rolePermissions) ? transferKeg : undefined}
+            onEditKeg={canManageModule('kegs', user.role, state.rolePermissions) ? (keg) => {
               setEditingKeg(keg);
               setView('keg-edit');
             } : undefined}
             onConfirmRequest={showConfirm}
-            onBulkDelete={canDelete(user.role) ? deleteKegs : undefined}
-            onBulkUpdate={canEdit(user.role) ? updateKegs : undefined}
-            onBulkTransfer={canEdit(user.role) ? transferKegs : undefined}
-            onBulkRegisterLoss={canEdit(user.role) ? registerKegLosses : undefined}
+            onBulkDelete={canDelete(user.role, state.rolePermissions) ? deleteKegs : undefined}
+            onBulkUpdate={canManageModule('kegs', user.role, state.rolePermissions) ? updateKegs : undefined}
+            onBulkTransfer={canManageModule('kegs', user.role, state.rolePermissions) ? transferKegs : undefined}
+            onBulkRegisterLoss={canManageModule('kegs', user.role, state.rolePermissions) ? registerKegLosses : undefined}
           />
         );
       case 'keg-sales-new':
@@ -1995,7 +2058,7 @@ const App: React.FC = () => {
 
 
       case 'settings':
-        if (!canConfigure(user.role)) {
+        if (!canConfigure(user.role, state.rolePermissions)) {
           return (
             <div className="flex flex-col items-center justify-center h-full text-slate-400 animate-in fade-in zoom-in duration-300">
               <span className="material-symbols-outlined text-6xl mb-4 text-slate-300">lock_person</span>
@@ -2034,6 +2097,7 @@ const App: React.FC = () => {
             onCreateSystemUser={handleAddSystemUser}
             onUpdateUserRole={updateSystemUserRole}
             onDeleteUser={deleteSystemUser}
+            onUpdateRolePermissions={updateRolePermissions}
           />
         );
       case 'notifications':
@@ -2062,6 +2126,7 @@ const App: React.FC = () => {
         onLogout={handleLogout}
         isOpen={isSidebarOpen}
         onClose={() => setIsSidebarOpen(false)}
+        rolePermissions={state.rolePermissions}
       />
       <div className="flex flex-1 flex-col overflow-hidden bg-background-light relative">
         <Header
@@ -2075,7 +2140,7 @@ const App: React.FC = () => {
             {renderView()}
           </div>
         </main>
-        {canUseChatbot(user.role) && <Chatbot appState={state} user={user} />}
+        {canUseChatbot(user.role, state.rolePermissions) && <Chatbot appState={state} user={user} />}
       </div>
       <Toast toasts={state.toasts} onRemove={removeToast} />
       <ConfirmationModal state={state.confirmationModal} />

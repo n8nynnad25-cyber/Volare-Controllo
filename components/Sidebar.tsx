@@ -1,7 +1,6 @@
-
 import React from 'react';
-import { ViewType, User } from '../types';
-import { canConfigure } from '../src/utils/permissions';
+import { ViewType, User, RolePermissions } from '../types';
+import { canConfigure, canViewModule } from '../src/utils/permissions';
 
 interface SidebarProps {
   currentView: ViewType;
@@ -10,16 +9,21 @@ interface SidebarProps {
   onLogout: () => void | Promise<void>;
   isOpen: boolean;
   onClose: () => void;
+  rolePermissions?: RolePermissions[];
 }
 
-const Sidebar: React.FC<SidebarProps> = ({ currentView, onViewChange, user, onLogout, isOpen, onClose }) => {
-  const menuItems = [
-    { id: 'dashboard', label: 'Análise', icon: 'dashboard' },
-    { id: 'cash-fund', label: 'Fundo de Caixa', icon: 'account_balance_wallet' },
-    { id: 'mileage', label: 'Quilometragem', icon: 'speed' },
-    { id: 'keg-sales', label: 'Venda de Barris', icon: 'propane_tank' },
-    { id: 'notifications', label: 'Notificações', icon: 'notifications' },
+const Sidebar: React.FC<SidebarProps> = ({ currentView, onViewChange, user, onLogout, isOpen, onClose, rolePermissions = [] }) => {
+  const allMenuItems = [
+    { id: 'dashboard', label: 'Análise', icon: 'dashboard', module: 'dashboard' },
+    { id: 'cash-fund', label: 'Fundo de Caixa', icon: 'account_balance_wallet', module: 'cashFund' },
+    { id: 'mileage', label: 'Quilometragem', icon: 'speed', module: 'mileage' },
+    { id: 'keg-sales', label: 'Venda de Barris', icon: 'propane_tank', module: 'kegs' },
+    { id: 'notifications', label: 'Notificações', icon: 'notifications', module: 'notifications' },
   ];
+
+  const menuItems = allMenuItems.filter(item => 
+    user && canViewModule(item.module as keyof RolePermissions, user.role, rolePermissions)
+  );
 
   const handleItemClick = (id: string) => {
     onViewChange(id as ViewType);
@@ -70,7 +74,7 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, onViewChange, user, onLo
         </nav>
 
         <div className="border-t border-white/10 px-4 py-4 space-y-1">
-          {canConfigure(user.role) && (
+          {canConfigure(user.role, rolePermissions) && (
             <button
               onClick={() => handleItemClick('settings')}
               className={`w-full group flex items-center gap-3 rounded-lg px-3 py-3 transition-all ${currentView === 'settings'
@@ -91,7 +95,7 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, onViewChange, user, onLo
               />
               <div className="flex flex-col overflow-hidden">
                 <span className="truncate text-sm font-bold text-white">{user.name}</span>
-                <span className="truncate text-xs text-sidebar-text">{user.role === 'manager' ? 'Gerente' : user.role === 'boss' ? 'Visualizador' : 'Admin'}</span>
+                <span className="truncate text-xs text-sidebar-text">{user.role === 'manager' ? 'Gerente' : user.role === 'boss' ? 'Boss' : 'Admin'}</span>
               </div>
             </div>
             <button

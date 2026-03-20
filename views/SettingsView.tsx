@@ -25,9 +25,10 @@ interface SettingsViewProps {
     onCreateSystemUser?: (data: { name: string, email: string, password: string, role: string }) => Promise<void>;
     onUpdateUserRole?: (id: string, role: any) => Promise<void>;
     onDeleteUser?: (id: string) => Promise<void>;
+    onUpdateRolePermissions?: (role: any, permissions: any) => Promise<void>;
 }
 
-type Tab = 'general' | 'users' | 'categories' | 'managers' | 'vehicles' | 'kegs';
+type Tab = 'general' | 'users' | 'permissions' | 'categories' | 'managers' | 'vehicles' | 'kegs';
 
 const SettingsView: React.FC<SettingsViewProps> = ({
     state,
@@ -51,7 +52,8 @@ const SettingsView: React.FC<SettingsViewProps> = ({
     onClearData,
     onCreateSystemUser,
     onUpdateUserRole,
-    onDeleteUser
+    onDeleteUser,
+    onUpdateRolePermissions
 }) => {
     const [activeTab, setActiveTab] = useState<Tab>('general');
 
@@ -271,6 +273,7 @@ const SettingsView: React.FC<SettingsViewProps> = ({
                 <div className="w-full lg:w-64 flex flex-col gap-2">
                     <TabButton active={activeTab === 'general'} onClick={() => setActiveTab('general')} label="Geral" icon="settings" />
                     <TabButton active={activeTab === 'users'} onClick={() => setActiveTab('users')} label="Utilizadores (Login)" icon="manage_accounts" />
+                    <TabButton active={activeTab === 'permissions'} onClick={() => setActiveTab('permissions')} label="Níveis de Acesso" icon="rule" />
                     <TabButton active={activeTab === 'categories'} onClick={() => setActiveTab('categories')} label="Categorias" icon="category" />
                     <TabButton active={activeTab === 'managers'} onClick={() => setActiveTab('managers')} label="Gerentes (Assinaturas)" icon="badge" />
                     <TabButton active={activeTab === 'vehicles'} onClick={() => setActiveTab('vehicles')} label="Veículos" icon="motorcycle" />
@@ -279,6 +282,153 @@ const SettingsView: React.FC<SettingsViewProps> = ({
 
                 {/* Content Area */}
                 <div className="flex-1 bg-white rounded-3xl border border-slate-100 shadow-sm p-8 min-h-[500px]">
+
+                    {activeTab === 'permissions' && (
+                        <div className="space-y-8">
+                            <div className="flex justify-between items-center border-b border-slate-100 pb-4">
+                                <h3 className="text-xl font-black text-slate-800 uppercase">Níveis de Acesso por Cargo</h3>
+                            </div>
+
+                            <div className="p-4 bg-blue-50 text-blue-800 rounded-xl text-sm flex gap-3 items-start mb-6">
+                                <span className="material-symbols-outlined shrink-0">info</span>
+                                <p>
+                                    As permissões definidas aqui aplicam-se a todos os utilizadores com o cargo correspondente.
+                                    <strong> Visualizar:</strong> Permite ver os dados. <strong>Mexer:</strong> Permite criar, editar e apagar (se permitido globalmente).
+                                </p>
+                            </div>
+
+                            <div className="overflow-x-auto rounded-xl border border-slate-100">
+                                <table className="w-full text-left text-sm">
+                                    <thead className="bg-slate-50 text-slate-500 font-bold uppercase text-xs">
+                                        <tr>
+                                            <th className="px-6 py-4">Módulo / Recurso</th>
+                                            <th className="px-6 py-4 text-center border-l border-slate-200 bg-red-50/50">Gerente (V | M)</th>
+                                            <th className="px-6 py-4 text-center border-l border-slate-200 bg-amber-50/50">Boss (V | M)</th>
+                                            <th className="px-6 py-4 text-center border-l border-slate-200">Admin</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-slate-100">
+                                        {[
+                                            { id: 'dashboard', label: '📊 Dashboard (Análise)' },
+                                            { id: 'cashFund', label: '💰 Fundo de Caixa' },
+                                            { id: 'mileage', label: '🚗 Quilometragem' },
+                                            { id: 'kegs', label: '🛢️ Venda de Barris' },
+                                            { id: 'notifications', label: '🔔 Notificações' },
+                                            { id: 'settings', label: '⚙️ Configurações' },
+                                        ].map((mod) => (
+                                            <tr key={mod.id} className="hover:bg-slate-50">
+                                                <td className="px-6 py-4 font-bold text-slate-800">{mod.label}</td>
+                                                {/* Gerente Column */}
+                                                <td className="px-6 py-4 border-l border-slate-100 bg-red-50/20">
+                                                    <div className="flex justify-center gap-4">
+                                                        <PermissionToggle
+                                                            checked={(state.rolePermissions.find(p => p.role === 'manager') as any)?.[mod.id]?.view || false}
+                                                            onChange={(val) => {
+                                                                const current = state.rolePermissions.find(p => p.role === 'manager');
+                                                                if (current) {
+                                                                    const updated = { ...current, [mod.id]: { ...(current as any)[mod.id], view: val } };
+                                                                    onUpdateRolePermissions?.('manager', updated);
+                                                                }
+                                                            }}
+                                                        />
+                                                        <PermissionToggle
+                                                            checked={(state.rolePermissions.find(p => p.role === 'manager') as any)?.[mod.id]?.manage || false}
+                                                            onChange={(val) => {
+                                                                const current = state.rolePermissions.find(p => p.role === 'manager');
+                                                                if (current) {
+                                                                    const updated = { ...current, [mod.id]: { ...(current as any)[mod.id], manage: val } };
+                                                                    onUpdateRolePermissions?.('manager', updated);
+                                                                }
+                                                            }}
+                                                        />
+                                                    </div>
+                                                </td>
+                                                {/* Boss Column */}
+                                                <td className="px-6 py-4 border-l border-slate-100 bg-amber-50/20">
+                                                    <div className="flex justify-center gap-4">
+                                                        <PermissionToggle
+                                                            checked={(state.rolePermissions.find(p => p.role === 'boss') as any)?.[mod.id]?.view || false}
+                                                            onChange={(val) => {
+                                                                const current = state.rolePermissions.find(p => p.role === 'boss');
+                                                                if (current) {
+                                                                    const updated = { ...current, [mod.id]: { ...(current as any)[mod.id], view: val } };
+                                                                    onUpdateRolePermissions?.('boss', updated);
+                                                                }
+                                                            }}
+                                                        />
+                                                        <PermissionToggle
+                                                            checked={(state.rolePermissions.find(p => p.role === 'boss') as any)?.[mod.id]?.manage || false}
+                                                            onChange={(val) => {
+                                                                const current = state.rolePermissions.find(p => p.role === 'boss');
+                                                                if (current) {
+                                                                    const updated = { ...current, [mod.id]: { ...(current as any)[mod.id], manage: val } };
+                                                                    onUpdateRolePermissions?.('boss', updated);
+                                                                }
+                                                            }}
+                                                        />
+                                                    </div>
+                                                </td>
+                                                {/* Admin Column (Static) */}
+                                                <td className="px-6 py-4 border-l border-slate-100 text-center">
+                                                    <span className="text-emerald-600 font-black text-xs uppercase tracking-widest">Acesso Total</span>
+                                                </td>
+                                            </tr>
+                                        ))}
+
+                                        {/* Global Actions */}
+                                        <tr className="bg-slate-50/50">
+                                            <td className="px-6 py-4 font-bold text-slate-800">🗑️ Apagar Registos (Permanente)</td>
+                                            <td className="px-6 py-4 border-l border-slate-100 text-center">
+                                                <PermissionToggle
+                                                    checked={state.rolePermissions.find(p => p.role === 'manager')?.canDelete || false}
+                                                    onChange={(val) => {
+                                                        const current = state.rolePermissions.find(p => p.role === 'manager');
+                                                        if (current) onUpdateRolePermissions?.('manager', { ...current, canDelete: val });
+                                                    }}
+                                                />
+                                            </td>
+                                            <td className="px-6 py-4 border-l border-slate-100 text-center">
+                                                <PermissionToggle
+                                                    checked={state.rolePermissions.find(p => p.role === 'boss')?.canDelete || false}
+                                                    onChange={(val) => {
+                                                        const current = state.rolePermissions.find(p => p.role === 'boss');
+                                                        if (current) onUpdateRolePermissions?.('boss', { ...current, canDelete: val });
+                                                    }}
+                                                />
+                                            </td>
+                                            <td className="px-6 py-4 border-l border-slate-100 text-center">
+                                                <span className="material-symbols-outlined text-emerald-600">check_circle</span>
+                                            </td>
+                                        </tr>
+                                        <tr>
+                                            <td className="px-6 py-4 font-bold text-slate-800">🤖 Acesso ao Assistente AI (Chatbot)</td>
+                                            <td className="px-6 py-4 border-l border-slate-100 text-center">
+                                                <PermissionToggle
+                                                    checked={state.rolePermissions.find(p => p.role === 'manager')?.canAccessChatbot || false}
+                                                    onChange={(val) => {
+                                                        const current = state.rolePermissions.find(p => p.role === 'manager');
+                                                        if (current) onUpdateRolePermissions?.('manager', { ...current, canAccessChatbot: val });
+                                                    }}
+                                                />
+                                            </td>
+                                            <td className="px-6 py-4 border-l border-slate-100 text-center">
+                                                <PermissionToggle
+                                                    checked={state.rolePermissions.find(p => p.role === 'boss')?.canAccessChatbot || false}
+                                                    onChange={(val) => {
+                                                        const current = state.rolePermissions.find(p => p.role === 'boss');
+                                                        if (current) onUpdateRolePermissions?.('boss', { ...current, canAccessChatbot: val });
+                                                    }}
+                                                />
+                                            </td>
+                                            <td className="px-6 py-4 border-l border-slate-100 text-center">
+                                                <span className="material-symbols-outlined text-emerald-600">check_circle</span>
+                                            </td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    )}
 
                     {activeTab === 'users' && (
                         <div className="space-y-8">
@@ -952,6 +1102,15 @@ const SettingsView: React.FC<SettingsViewProps> = ({
         </div>
     );
 };
+
+const PermissionToggle = ({ checked, onChange }: { checked: boolean, onChange: (val: boolean) => void }) => (
+    <button
+        onClick={() => onChange(!checked)}
+        className={`size-6 rounded flex items-center justify-center transition-all ${checked ? 'bg-emerald-500 text-white shadow-sm' : 'border-2 border-slate-200 bg-white text-transparent hover:border-slate-300'}`}
+    >
+        <span className="material-symbols-outlined text-[16px] font-black">{checked ? 'check' : ''}</span>
+    </button>
+);
 
 const TabButton = ({ active, onClick, label, icon }: any) => (
     <button
