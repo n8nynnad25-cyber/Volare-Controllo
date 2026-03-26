@@ -14,9 +14,10 @@ interface CashFundDashboardProps {
   onEdit?: (tx: CashTransaction) => void;
   onDelete?: (id: string) => void;
   onConfirmRequest?: (message: string) => Promise<boolean>;
+  onBulkDelete?: (ids: string[]) => void;
 }
 
-const CashFundDashboard: React.FC<CashFundDashboardProps> = ({ state, onAdd, onEdit, onDelete, onConfirmRequest }) => {
+const CashFundDashboard: React.FC<CashFundDashboardProps> = ({ state, onAdd, onEdit, onDelete, onConfirmRequest, onBulkDelete }) => {
   // Filtros
   const [startDate, setStartDate] = useState<string>('');
   const [endDate, setEndDate] = useState<string>('');
@@ -24,6 +25,8 @@ const CashFundDashboard: React.FC<CashFundDashboardProps> = ({ state, onAdd, onE
   const [filterCategory, setFilterCategory] = useState<string>('');
   const [filterVD, setFilterVD] = useState<string>('all');
   const [filterSearch, setFilterSearch] = useState<string>('');
+
+  const [selectedTxIds, setSelectedTxIds] = useState<string[]>([]);
 
   const filteredTransactions = useMemo(() => {
     return state.cashTransactions.filter(tx => {
@@ -84,6 +87,38 @@ const CashFundDashboard: React.FC<CashFundDashboardProps> = ({ state, onAdd, onE
     ]);
 
     exportToCSV('relatorio_fundo_caixa', headers, rows);
+  };
+
+  const toggleSelectTx = (id: string, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    setSelectedTxIds(prev =>
+      prev.includes(id) ? prev.filter(txId => txId !== id) : [...prev, id]
+    );
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedTxIds.length === filteredTransactions.length) {
+      setSelectedTxIds([]);
+    } else {
+      setSelectedTxIds(filteredTransactions.map(tx => tx.id));
+    }
+  };
+
+  const handleBulkDelete = async () => {
+    const confirmed = onConfirmRequest
+      ? await onConfirmRequest(`Tem certeza que deseja APAGAR ${selectedTxIds.length} movimentos selecionados? Esta ação não pode ser desfeita.`)
+      : confirm(`Tem certeza que deseja APAGAR ${selectedTxIds.length} movimentos selecionados? Esta ação não pode ser desfeita.`);
+
+    if (confirmed) {
+      if (onBulkDelete) {
+        onBulkDelete(selectedTxIds);
+      } else if (onDelete) {
+        for (const id of selectedTxIds) {
+          onDelete(id); // Using the sync call correctly since it wraps async supabase action later
+        }
+      }
+      setSelectedTxIds([]);
+    }
   };
 
   // Global Totals (Filtered)
@@ -389,6 +424,16 @@ const CashFundDashboard: React.FC<CashFundDashboardProps> = ({ state, onAdd, onE
           <table className="w-full text-left">
             <thead className="bg-slate-50/50 text-slate-400 text-[10px] font-black uppercase tracking-widest border-b border-slate-100">
               <tr>
+                <th className="px-6 py-4 w-10">
+                  <div className="flex items-center justify-center">
+                    <input
+                      type="checkbox"
+                      checked={filteredTransactions.length > 0 && selectedTxIds.length === filteredTransactions.length}
+                      onChange={toggleSelectAll}
+                      className="w-4 h-4 rounded border-slate-300 text-primary focus:ring-primary cursor-pointer"
+                    />
+                  </div>
+                </th>
                 <th className="px-6 py-4">Data</th>
                 <th className="px-6 py-4">Responsável</th>
                 <th className="px-6 py-4">Categoria</th>
@@ -400,7 +445,24 @@ const CashFundDashboard: React.FC<CashFundDashboardProps> = ({ state, onAdd, onE
             </thead>
             <tbody className="divide-y divide-slate-100 text-sm">
               {filteredTransactions.map((tx) => (
-                <tr key={tx.id} className="hover:bg-slate-50 transition-colors group">
+                <tr 
+                  key={tx.id} 
+                  className={`transition-colors group cursor-pointer ${selectedTxIds.includes(tx.id) ? 'bg-primary/5 hover:bg-primary/10' : 'hover:bg-slate-50'}`}
+                  onClick={() => toggleSelectTx(tx.id)}
+                >
+                  <td className="px-6 py-4" onClick={(e) => e.stopPropagation()}>
+                    <div className="flex items-center justify-center">
+                      <input
+                        type="checkbox"
+                        checked={selectedTxIds.includes(tx.id)}
+                        onChange={(e) => {
+                          e.stopPropagation();
+                          toggleSelectTx(tx.id);
+                        }}
+                        className="w-4 h-4 rounded border-slate-300 text-primary focus:ring-primary cursor-pointer"
+                      />
+                    </div>
+                  </td>
                   <td className="px-6 py-4 text-slate-400 font-medium">{new Date(tx.date).toLocaleDateString('pt-BR')}</td>
                   <td className="px-6 py-4">
                     <div className="flex items-center gap-2">
@@ -464,6 +526,40 @@ const CashFundDashboard: React.FC<CashFundDashboardProps> = ({ state, onAdd, onE
             </tbody>
           </table>
         </div>
+
+        {/* Bulk Action Bar */}
+        {selectedTxIds.length > 0 && (
+          <div className="fixed bottom-8 left-1/2 -translate-x-1/2 z-50 animate-in slide-in-from-bottom-10 duration-500">
+            <div className="bg-slate-900 text-white rounded-2xl p-4 shadow-2xl flex items-center gap-8 border border-slate-800">
+              <div className="flex flex-col">
+                <span className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-500">Selecionados</span>
+                <span className="text-xl font-black">{selectedTxIds.length} <span className="text-xs text-slate-400">Linha(s)</span></span>
+              </div>
+
+              <div className="h-8 w-px bg-slate-800"></div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={(e) => { e.stopPropagation(); handleBulkDelete(); }}
+                  className="flex flex-col items-center gap-1 px-4 py-2 hover:bg-slate-800 rounded-xl transition-all group"
+                >
+                  <span className="material-symbols-outlined text-[20px] text-slate-400 group-hover:text-rose-500 transition-colors group-hover:scale-110">delete</span>
+                  <span className="text-[9px] font-bold uppercase tracking-widest text-slate-300 group-hover:text-rose-500 transition-colors">Apagar</span>
+                </button>
+              </div>
+
+              <div className="h-8 w-px bg-slate-800"></div>
+
+              <button
+                onClick={(e) => { e.stopPropagation(); setSelectedTxIds([]); }}
+                className="p-2 hover:bg-slate-800 rounded-lg transition-all"
+                title="Desmarcar Todos"
+              >
+                <span className="material-symbols-outlined text-[20px] text-slate-500">close</span>
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

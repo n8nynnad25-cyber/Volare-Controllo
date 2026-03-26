@@ -691,6 +691,40 @@ const App: React.FC = () => {
     }
   };
 
+  const deleteCashTransactions = async (ids: string[]) => {
+    const { error } = await supabase
+      .from('cash_transactions')
+      .delete()
+      .in('id', ids);
+
+    if (error) {
+      console.error("Erro ao remover transações:", error);
+      showToast("Erro ao remover transações!", "error");
+      return;
+    }
+
+    const originals = state.cashTransactions.filter(t => ids.includes(t.id));
+
+    showToast(`${ids.length} transações removidas.`, "success");
+
+    setState(prev => ({
+      ...prev,
+      cashTransactions: prev.cashTransactions.filter(tx => !ids.includes(tx.id))
+    }));
+
+    // Notificações
+    originals.forEach(original => {
+      addNotification({
+        module: 'Fundo de Caixa',
+        eventType: 'Eliminado',
+        entity: 'Transação',
+        referenceId: original.id,
+        summary: `🔴 Registo de caixa eliminado (Massa): ${original.description}`,
+        relatedManager: original.manager
+      });
+    });
+  };
+
   const addMileageRecord = async (record: MileageRecord | MileageRecord[]) => {
     const newRecords = Array.isArray(record) ? record : [record];
 
@@ -1915,6 +1949,7 @@ const App: React.FC = () => {
               setView('cash-fund-edit');
             } : undefined}
             onDelete={canDelete(user.role, state.rolePermissions) ? deleteCashTransaction : undefined}
+            onBulkDelete={canDelete(user.role, state.rolePermissions) ? deleteCashTransactions : undefined}
             onConfirmRequest={showConfirm}
           />
         );
